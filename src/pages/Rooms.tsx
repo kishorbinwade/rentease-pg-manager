@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, Edit, Trash2, User, DollarSign } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -15,182 +15,169 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const Rooms = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [newRoom, setNewRoom] = useState({
-    number: "",
-    type: "",
-    rent: "",
+    room_number: "",
+    room_type: "",
+    rent_amount: "",
     floor: ""
   });
 
-  // Mock data - replace with real data from Supabase
-  const rooms = [
-    {
-      id: 1,
-      number: "A-101",
-      type: "Single",
-      rent: 8000,
-      status: "occupied",
-      tenant: "Rahul Sharma",
-      tenantPhone: "+91 9876543210",
-      floor: 1
-    },
-    {
-      id: 2,
-      number: "A-102",
-      type: "Single",
-      rent: 8000,
-      status: "vacant",
-      tenant: null,
-      tenantPhone: null,
-      floor: 1
-    },
-    {
-      id: 3,
-      number: "B-201",
-      type: "Double",
-      rent: 12000,
-      status: "occupied",
-      tenant: "Priya Singh",
-      tenantPhone: "+91 9876543211",
-      floor: 2
-    },
-    {
-      id: 4,
-      number: "B-202",
-      type: "Double",
-      rent: 12000,
-      status: "vacant",
-      tenant: null,
-      tenantPhone: null,
-      floor: 2
-    },
-    {
-      id: 5,
-      number: "C-301",
-      type: "Triple",
-      rent: 15000,
-      status: "occupied",
-      tenant: "Amit Kumar",
-      tenantPhone: "+91 9876543212",
-      floor: 3
-    },
-    {
-      id: 6,
-      number: "C-302",
-      type: "Triple",
-      rent: 15000,
-      status: "vacant",
-      tenant: null,
-      tenantPhone: null,
-      floor: 3
+  useEffect(() => {
+    if (user) {
+      fetchRooms();
     }
-  ];
+  }, [user]);
 
-  const filteredRooms = rooms.filter(room =>
-    room.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    room.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (room.tenant && room.tenant.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const fetchRooms = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select(`
+          *,
+          tenants(
+            full_name,
+            phone
+          )
+        `)
+        .eq('owner_id', user?.id)
+        .order('room_number');
 
-  const getStatusBadge = (status: string) => {
+      if (error) throw error;
+      setRooms(data || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch rooms",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddRoom = async () => {
+    try {
+      if (!newRoom.room_number || !newRoom.room_type || !newRoom.rent_amount) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('rooms')
+        .insert({
+          room_number: newRoom.room_number,
+          room_type: newRoom.room_type,
+          rent_amount: parseFloat(newRoom.rent_amount),
+          floor: newRoom.floor ? parseInt(newRoom.floor) : null,
+          owner_id: user?.id,
+          status: 'vacant'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Room added successfully",
+      });
+
+      setNewRoom({
+        room_number: "",
+        room_type: "",
+        rent_amount: "",
+        floor: ""
+      });
+      setIsAddDialogOpen(false);
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add room",
+        variant: "destructive",
+      });
+      console.error('Error adding room:', error);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId) => {
+    try {
+      // Check if room is occupied
+      const room = rooms.find(r => r.id === roomId);
+      if (room?.status === 'occupied') {
+        toast({
+          title: "Error",
+          description: "Cannot delete an occupied room",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('rooms')
+        .delete()
+        .eq('id', roomId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Room deleted successfully",
+      });
+
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete room",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredRooms = rooms.filter(room => {
+    const matchesSearch = room.room_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      room.room_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (room.tenants?.[0]?.full_name && room.tenants[0].full_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" || room.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const getStatusBadge = (status) => {
     if (status === "occupied") {
       return <Badge className="bg-occupied text-occupied-foreground">Occupied</Badge>;
+    } else if (status === "maintenance") {
+      return <Badge className="bg-warning text-warning-foreground">Maintenance</Badge>;
     }
     return <Badge className="bg-vacant text-vacant-foreground">Vacant</Badge>;
   };
 
-  const handleAddRoom = () => {
-    // TODO: Add room to Supabase
-    console.log("Adding room:", newRoom);
-    setNewRoom({ number: "", type: "", rent: "", floor: "" });
-    setIsAddDialogOpen(false);
-  };
-
-  const AddRoomDialog = () => (
-    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Room
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Add New Room</DialogTitle>
-          <DialogDescription>
-            Add a new room to your PG property. Fill in the details below.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="roomNumber" className="text-right">
-              Room Number
-            </Label>
-            <Input 
-              id="roomNumber" 
-              placeholder="A-101" 
-              className="col-span-3"
-              value={newRoom.number}
-              onChange={(e) => setNewRoom({...newRoom, number: e.target.value})}
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="roomType" className="text-right">
-              Type
-            </Label>
-            <Select value={newRoom.type} onValueChange={(value) => setNewRoom({...newRoom, type: value})}>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select room type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Single">Single</SelectItem>
-                <SelectItem value="Double">Double</SelectItem>
-                <SelectItem value="Triple">Triple</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="rent" className="text-right">
-              Rent (₹)
-            </Label>
-            <Input 
-              id="rent" 
-              type="number" 
-              placeholder="8000" 
-              className="col-span-3"
-              value={newRoom.rent}
-              onChange={(e) => setNewRoom({...newRoom, rent: e.target.value})}
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="floor" className="text-right">
-              Floor
-            </Label>
-            <Input 
-              id="floor" 
-              type="number" 
-              placeholder="1" 
-              className="col-span-3"
-              value={newRoom.floor}
-              onChange={(e) => setNewRoom({...newRoom, floor: e.target.value})}
-            />
-          </div>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-muted">
+        <Header />
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-        <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleAddRoom}>
-            Add Room
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-muted">
@@ -203,7 +190,78 @@ const Rooms = () => {
             <h1 className="text-3xl font-bold text-foreground mb-2">Room Management</h1>
             <p className="text-muted-foreground">Manage your PG rooms and track occupancy</p>
           </div>
-          <AddRoomDialog />
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Room
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Add New Room</DialogTitle>
+                <DialogDescription>
+                  Add a new room to your PG property. Fill in the details below.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="roomNumber" className="text-right">Room Number *</Label>
+                  <Input 
+                    id="roomNumber" 
+                    placeholder="A-101" 
+                    className="col-span-3"
+                    value={newRoom.room_number}
+                    onChange={(e) => setNewRoom({...newRoom, room_number: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="roomType" className="text-right">Type *</Label>
+                  <Select value={newRoom.room_type} onValueChange={(value) => setNewRoom({...newRoom, room_type: value})}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select room type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Single">Single</SelectItem>
+                      <SelectItem value="Double">Double</SelectItem>
+                      <SelectItem value="Triple">Triple</SelectItem>
+                      <SelectItem value="Dormitory">Dormitory</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="rent" className="text-right">Rent (₹) *</Label>
+                  <Input 
+                    id="rent" 
+                    type="number" 
+                    placeholder="8000" 
+                    className="col-span-3"
+                    value={newRoom.rent_amount}
+                    onChange={(e) => setNewRoom({...newRoom, rent_amount: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="floor" className="text-right">Floor</Label>
+                  <Input 
+                    id="floor" 
+                    type="number" 
+                    placeholder="1" 
+                    className="col-span-3"
+                    value={newRoom.floor}
+                    onChange={(e) => setNewRoom({...newRoom, floor: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddRoom}>
+                  Add Room
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Search and Filters */}
@@ -217,7 +275,7 @@ const Rooms = () => {
               className="pl-10"
             />
           </div>
-          <Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
@@ -225,6 +283,7 @@ const Rooms = () => {
               <SelectItem value="all">All Rooms</SelectItem>
               <SelectItem value="vacant">Vacant</SelectItem>
               <SelectItem value="occupied">Occupied</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -234,33 +293,33 @@ const Rooms = () => {
           {filteredRooms.map((room) => (
             <Card key={room.id} className="shadow-soft hover:shadow-medium transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg">Room {room.number}</CardTitle>
+                <CardTitle className="text-lg">Room {room.room_number}</CardTitle>
                 {getStatusBadge(room.status)}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Type</p>
-                    <p className="font-medium">{room.type}</p>
+                    <p className="font-medium">{room.room_type}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Floor</p>
-                    <p className="font-medium">{room.floor}</p>
+                    <p className="font-medium">{room.floor || 'N/A'}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
                   <DollarSign className="h-4 w-4 text-success" />
-                  <span className="font-semibold text-success">₹{room.rent.toLocaleString()}/month</span>
+                  <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
                 </div>
 
-                {room.status === "occupied" && room.tenant && (
+                {room.status === "occupied" && room.tenants?.[0] && (
                   <div className="bg-muted p-3 rounded-lg">
                     <div className="flex items-center space-x-2 mb-1">
                       <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">{room.tenant}</span>
+                      <span className="font-medium text-sm">{room.tenants[0].full_name}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">{room.tenantPhone}</p>
+                    <p className="text-xs text-muted-foreground">{room.tenants[0].phone}</p>
                   </div>
                 )}
 
@@ -269,7 +328,13 @@ const Rooms = () => {
                     <Edit className="mr-1 h-3 w-3" />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteRoom(room.id)}
+                    disabled={room.status === 'occupied'}
+                  >
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
@@ -279,7 +344,7 @@ const Rooms = () => {
         </div>
 
         {/* Summary Stats */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="bg-gradient-card shadow-soft">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-foreground mb-1">
@@ -302,6 +367,14 @@ const Rooms = () => {
                 {rooms.filter(r => r.status === "vacant").length}
               </div>
               <div className="text-sm text-muted-foreground">Vacant</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-card shadow-soft">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl font-bold text-warning-foreground mb-1">
+                {rooms.filter(r => r.status === "maintenance").length}
+              </div>
+              <div className="text-sm text-muted-foreground">Maintenance</div>
             </CardContent>
           </Card>
         </div>
