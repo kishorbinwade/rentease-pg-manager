@@ -1,9 +1,22 @@
 import { Building, Users, Shield, CreditCard, ArrowRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import heroImage from "@/assets/rentease-hero.jpg";
 
 const Index = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/auth');
+    }
+  };
+
   const features = [
     {
       icon: Building,
@@ -43,12 +56,20 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline" asChild>
-                <a href="/login">Sign In</a>
-              </Button>
-              <Button asChild>
-                <a href="/dashboard">Get Started</a>
-              </Button>
+              {user ? (
+                <Button onClick={() => navigate('/dashboard')}>
+                  Go to Dashboard
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => navigate('/auth')}>
+                    Sign In
+                  </Button>
+                  <Button onClick={handleGetStarted}>
+                    Get Started
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

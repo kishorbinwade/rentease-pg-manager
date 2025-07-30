@@ -1,5 +1,7 @@
 import { Building, Menu, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,6 +10,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const Header = () => {
+  const { userProfile, signOut, isAdmin } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
   return (
     <header className="bg-white border-b border-border shadow-soft sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3">
@@ -25,21 +35,25 @@ const Header = () => {
 
           {/* Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <a href="/dashboard" className="text-foreground hover:text-primary transition-colors font-medium">
+            <Link to="/dashboard" className="text-foreground hover:text-primary transition-colors font-medium">
               Dashboard
-            </a>
-            <a href="/rooms" className="text-foreground hover:text-primary transition-colors font-medium">
-              Rooms
-            </a>
-            <a href="/tenants" className="text-foreground hover:text-primary transition-colors font-medium">
-              Tenants
-            </a>
-            <a href="/rent" className="text-foreground hover:text-primary transition-colors font-medium">
-              Rent
-            </a>
-            <a href="/complaints" className="text-foreground hover:text-primary transition-colors font-medium">
+            </Link>
+            {isAdmin && (
+              <>
+                <Link to="/rooms" className="text-foreground hover:text-primary transition-colors font-medium">
+                  Rooms
+                </Link>
+                <Link to="/tenants" className="text-foreground hover:text-primary transition-colors font-medium">
+                  Tenants
+                </Link>
+                <Link to="/rent" className="text-foreground hover:text-primary transition-colors font-medium">
+                  Rent
+                </Link>
+              </>
+            )}
+            <Link to="/complaints" className="text-foreground hover:text-primary transition-colors font-medium">
               Complaints
-            </a>
+            </Link>
           </nav>
 
           {/* User Menu */}
@@ -51,11 +65,11 @@ const Header = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
+                <DropdownMenuItem disabled>
                   <User className="mr-2 h-4 w-4" />
-                  Profile
+                  {userProfile?.full_name || 'User'} ({userProfile?.role})
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Logout
                 </DropdownMenuItem>
