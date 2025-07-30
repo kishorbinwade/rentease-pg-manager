@@ -71,10 +71,10 @@ const Tenants = () => {
   const fetchRooms = async () => {
     try {
       const { data, error } = await supabase
-        .from('rooms')
+        .from('room_availability')
         .select('*')
         .eq('owner_id', user?.id)
-        .eq('status', 'vacant');
+        .gt('available_beds', 0);
 
       if (error) throw error;
       setRooms(data || []);
@@ -153,11 +153,19 @@ const Tenants = () => {
 
       if (error) throw error;
 
-      // Update room status to occupied
-      await supabase
-        .from('rooms')
-        .update({ status: 'occupied' })
-        .eq('id', newTenant.room_id);
+      // Check if room is now at full capacity and update status accordingly
+      const { data: roomData } = await supabase
+        .from('room_availability')
+        .select('available_beds')
+        .eq('id', newTenant.room_id)
+        .single();
+
+      if (roomData && roomData.available_beds === 0) {
+        await supabase
+          .from('rooms')
+          .update({ status: 'occupied' })
+          .eq('id', newTenant.room_id);
+      }
 
       toast({
         title: "Success",
@@ -196,12 +204,20 @@ const Tenants = () => {
 
       if (error) throw error;
 
-      // Update room status to vacant
+      // Check if room is now empty and update status accordingly
       if (roomId) {
-        await supabase
-          .from('rooms')
-          .update({ status: 'vacant' })
-          .eq('id', roomId);
+        const { data: roomData } = await supabase
+          .from('room_availability')
+          .select('capacity, current_occupancy')
+          .eq('id', roomId)
+          .single();
+
+        if (roomData && roomData.current_occupancy === 0) {
+          await supabase
+            .from('rooms')
+            .update({ status: 'vacant' })
+            .eq('id', roomId);
+        }
       }
 
       toast({
@@ -367,7 +383,7 @@ const Tenants = () => {
                     <SelectContent>
                       {rooms.map(room => (
                         <SelectItem key={room.id} value={room.id}>
-                          {room.room_number} ({room.room_type})
+                          {room.room_number} ({room.room_type}) - {room.available_beds} bed{room.available_beds > 1 ? 's' : ''} available
                         </SelectItem>
                       ))}
                     </SelectContent>
