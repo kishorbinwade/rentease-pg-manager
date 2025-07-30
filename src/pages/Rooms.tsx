@@ -19,6 +19,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const Rooms = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newRoom, setNewRoom] = useState({
+    number: "",
+    type: "",
+    rent: "",
+    floor: ""
+  });
 
   // Mock data - replace with real data from Supabase
   const rooms = [
@@ -97,6 +103,13 @@ const Rooms = () => {
     return <Badge className="bg-vacant text-vacant-foreground">Vacant</Badge>;
   };
 
+  const handleAddRoom = () => {
+    // TODO: Add room to Supabase
+    console.log("Adding room:", newRoom);
+    setNewRoom({ number: "", type: "", rent: "", floor: "" });
+    setIsAddDialogOpen(false);
+  };
+
   const AddRoomDialog = () => (
     <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
       <DialogTrigger asChild>
@@ -117,20 +130,26 @@ const Rooms = () => {
             <Label htmlFor="roomNumber" className="text-right">
               Room Number
             </Label>
-            <Input id="roomNumber" placeholder="A-101" className="col-span-3" />
+            <Input 
+              id="roomNumber" 
+              placeholder="A-101" 
+              className="col-span-3"
+              value={newRoom.number}
+              onChange={(e) => setNewRoom({...newRoom, number: e.target.value})}
+            />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="roomType" className="text-right">
               Type
             </Label>
-            <Select>
+            <Select value={newRoom.type} onValueChange={(value) => setNewRoom({...newRoom, type: value})}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select room type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="single">Single</SelectItem>
-                <SelectItem value="double">Double</SelectItem>
-                <SelectItem value="triple">Triple</SelectItem>
+                <SelectItem value="Single">Single</SelectItem>
+                <SelectItem value="Double">Double</SelectItem>
+                <SelectItem value="Triple">Triple</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -138,20 +157,34 @@ const Rooms = () => {
             <Label htmlFor="rent" className="text-right">
               Rent (₹)
             </Label>
-            <Input id="rent" type="number" placeholder="8000" className="col-span-3" />
+            <Input 
+              id="rent" 
+              type="number" 
+              placeholder="8000" 
+              className="col-span-3"
+              value={newRoom.rent}
+              onChange={(e) => setNewRoom({...newRoom, rent: e.target.value})}
+            />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="floor" className="text-right">
               Floor
             </Label>
-            <Input id="floor" type="number" placeholder="1" className="col-span-3" />
+            <Input 
+              id="floor" 
+              type="number" 
+              placeholder="1" 
+              className="col-span-3"
+              value={newRoom.floor}
+              onChange={(e) => setNewRoom({...newRoom, floor: e.target.value})}
+            />
           </div>
         </div>
         <div className="flex justify-end space-x-2">
           <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={() => setIsAddDialogOpen(false)}>
+          <Button onClick={handleAddRoom}>
             Add Room
           </Button>
         </div>
