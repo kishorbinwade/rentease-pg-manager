@@ -14,16 +14,252 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      complaints: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          owner_id: string
+          priority: Database["public"]["Enums"]["complaint_priority"]
+          room_id: string | null
+          status: Database["public"]["Enums"]["complaint_status"]
+          tenant_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          owner_id: string
+          priority?: Database["public"]["Enums"]["complaint_priority"]
+          room_id?: string | null
+          status?: Database["public"]["Enums"]["complaint_status"]
+          tenant_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          owner_id?: string
+          priority?: Database["public"]["Enums"]["complaint_priority"]
+          room_id?: string | null
+          status?: Database["public"]["Enums"]["complaint_status"]
+          tenant_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaints_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complaints_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rent_records: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: string
+          id: string
+          owner_id: string
+          paid_date: string | null
+          room_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          due_date: string
+          id?: string
+          owner_id: string
+          paid_date?: string | null
+          room_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: string
+          id?: string
+          owner_id?: string
+          paid_date?: string | null
+          room_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_records_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          created_at: string
+          floor: number | null
+          id: string
+          owner_id: string
+          rent_amount: number
+          room_number: string
+          room_type: string
+          status: Database["public"]["Enums"]["room_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          floor?: number | null
+          id?: string
+          owner_id: string
+          rent_amount: number
+          room_number: string
+          room_type: string
+          status?: Database["public"]["Enums"]["room_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          floor?: number | null
+          id?: string
+          owner_id?: string
+          rent_amount?: number
+          room_number?: string
+          room_type?: string
+          status?: Database["public"]["Enums"]["room_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tenants: {
+        Row: {
+          agreement_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          id_proof_url: string | null
+          join_date: string
+          owner_id: string
+          phone: string
+          room_id: string | null
+          status: Database["public"]["Enums"]["tenant_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          agreement_url?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          id_proof_url?: string | null
+          join_date?: string
+          owner_id: string
+          phone: string
+          room_id?: string | null
+          status?: Database["public"]["Enums"]["tenant_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          agreement_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          id_proof_url?: string | null
+          join_date?: string
+          owner_id?: string
+          phone?: string
+          room_id?: string | null
+          status?: Database["public"]["Enums"]["tenant_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
     }
     Enums: {
-      [_ in never]: never
+      complaint_priority: "low" | "medium" | "high"
+      complaint_status: "open" | "in_progress" | "resolved"
+      room_status: "occupied" | "vacant" | "under_maintenance"
+      tenant_status: "active" | "notice_period" | "inactive"
+      user_role: "admin" | "tenant"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +386,12 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      complaint_priority: ["low", "medium", "high"],
+      complaint_status: ["open", "in_progress", "resolved"],
+      room_status: ["occupied", "vacant", "under_maintenance"],
+      tenant_status: ["active", "notice_period", "inactive"],
+      user_role: ["admin", "tenant"],
+    },
   },
 } as const
