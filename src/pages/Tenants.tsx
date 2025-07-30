@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { FileUploadSecurity } from "@/components/FileUploadSecurity";
 
 const Tenants = () => {
   const { user } = useAuth();
@@ -83,69 +84,136 @@ const Tenants = () => {
     }
   };
 
+  const validateAndSanitizeInput = (input: string, fieldName: string): string => {
+    if (!input || typeof input !== 'string') {
+      throw new Error(`${fieldName} is required`);
+    }
+    
+    // Basic XSS prevention - remove script tags and dangerous content
+    const sanitized = input
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '');
+    
+    // Trim and check length
+    const trimmed = sanitized.trim();
+    if (trimmed.length === 0) {
+      throw new Error(`${fieldName} cannot be empty`);
+    }
+    
+    return trimmed;
+  };
+
+  const validateFile = (file: File, maxSize: number = 10485760): void => {
+    // File size validation (10MB default)
+    if (file.size > maxSize) {
+      throw new Error('File size exceeds maximum limit of 10MB');
+    }
+    
+    // File type validation
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error('File type not allowed. Only images, PDF, and Word documents are permitted');
+    }
+    
+    // File name validation
+    if (/[<>:"/\\|?*]/.test(file.name)) {
+      throw new Error('File name contains invalid characters');
+    }
+  };
+
   const handleAddTenant = async () => {
     try {
-      if (!newTenant.full_name || !newTenant.email || !newTenant.phone || !newTenant.room_id) {
-        toast({
-          title: "Error",
-          description: "Please fill in all required fields",
-          variant: "destructive",
-        });
-        return;
+      // Validate and sanitize all inputs
+      const sanitizedData = {
+        fullName: validateAndSanitizeInput(newTenant.full_name, 'Full name'),
+        email: validateAndSanitizeInput(newTenant.email, 'Email'),
+        phone: validateAndSanitizeInput(newTenant.phone, 'Phone'),
+        roomId: newTenant.room_id,
+        joinDate: newTenant.join_date,
+        idProofType: newTenant.id_proof_type
+      };
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(sanitizedData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Phone format validation (basic)
+      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      if (!phoneRegex.test(sanitizedData.phone.replace(/[\s\-\(\)]/g, ''))) {
+        throw new Error('Please enter a valid phone number');
+      }
+
+      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType) {
+        throw new Error('Please fill in all required fields');
       }
 
       if (!newTenant.id_proof_file || !newTenant.agreement_file) {
-        toast({
-          title: "Error",
-          description: "ID proof and agreement files are mandatory",
-          variant: "destructive",
-        });
-        return;
+        throw new Error('ID proof and agreement files are mandatory');
+      }
+
+      // Validate files before upload
+      try {
+        validateFile(newTenant.id_proof_file);
+        validateFile(newTenant.agreement_file);
+      } catch (fileError) {
+        throw new Error(`File validation failed: ${fileError.message}`);
       }
 
       let id_proof_url = null;
       let agreement_url = null;
 
-      // Upload ID proof
+      // Upload ID proof with security measures
       if (newTenant.id_proof_file) {
         const idProofExtension = newTenant.id_proof_file.name.split('.').pop();
-        const idProofFileName = `${newTenant.full_name.toLowerCase().replace(/\s+/g, '-')}-${newTenant.id_proof_type}.${idProofExtension}`;
+        const sanitizedName = sanitizedData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const idProofFileName = `${Date.now()}-${sanitizedName}-${sanitizedData.idProofType}.${idProofExtension}`;
         
         const { data: idProofData, error: idProofError } = await supabase.storage
           .from('tenant-id-proofs')
           .upload(idProofFileName, newTenant.id_proof_file, {
-            upsert: true
+            upsert: false // Prevent overwriting for security
           });
 
-        if (idProofError) throw idProofError;
+        if (idProofError) throw new Error(`ID proof upload failed: ${idProofError.message}`);
         id_proof_url = idProofData?.path;
       }
 
-      // Upload agreement
+      // Upload agreement with security measures
       if (newTenant.agreement_file) {
         const agreementExtension = newTenant.agreement_file.name.split('.').pop();
-        const agreementFileName = `${newTenant.full_name.toLowerCase().replace(/\s+/g, '-')}-agreement.${agreementExtension}`;
+        const sanitizedName = sanitizedData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const agreementFileName = `${Date.now()}-${sanitizedName}-agreement.${agreementExtension}`;
         
         const { data: agreementData, error: agreementError } = await supabase.storage
           .from('agreements')
           .upload(agreementFileName, newTenant.agreement_file, {
-            upsert: true
+            upsert: false // Prevent overwriting for security
           });
 
-        if (agreementError) throw agreementError;
+        if (agreementError) throw new Error(`Agreement upload failed: ${agreementError.message}`);
         agreement_url = agreementData?.path;
       }
 
-      // Insert tenant
+      // Insert tenant with sanitized data and proper user association
       const { error } = await supabase
         .from('tenants')
         .insert({
-          full_name: newTenant.full_name,
-          email: newTenant.email,
-          phone: newTenant.phone,
-          room_id: newTenant.room_id,
-          join_date: newTenant.join_date,
+          full_name: sanitizedData.fullName,
+          email: sanitizedData.email,
+          phone: sanitizedData.phone,
+          room_id: sanitizedData.roomId,
+          join_date: sanitizedData.joinDate,
           owner_id: user?.id,
+          user_id: user?.id, // Ensure RLS compliance
           id_proof_url,
           agreement_url,
           status: 'active'
@@ -157,14 +225,14 @@ const Tenants = () => {
       const { data: roomData } = await supabase
         .from('room_availability')
         .select('available_beds')
-        .eq('id', newTenant.room_id)
+        .eq('id', sanitizedData.roomId)
         .single();
 
       if (roomData && roomData.available_beds === 0) {
         await supabase
           .from('rooms')
           .update({ status: 'occupied' })
-          .eq('id', newTenant.room_id);
+          .eq('id', sanitizedData.roomId);
       }
 
       toast({
@@ -186,9 +254,10 @@ const Tenants = () => {
       fetchTenants();
       fetchRooms();
     } catch (error) {
+      const errorMessage = error?.message || "Failed to add tenant";
       toast({
         title: "Error",
-        description: "Failed to add tenant",
+        description: errorMessage,
         variant: "destructive",
       });
       console.error('Error adding tenant:', error);
@@ -415,23 +484,27 @@ const Tenants = () => {
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="idProof" className="text-right">ID Proof File *</Label>
-                  <Input 
-                    id="idProof" 
-                    type="file" 
-                    accept="image/*,.pdf"
-                    className="col-span-3"
-                    onChange={(e) => setNewTenant({...newTenant, id_proof_file: e.target.files[0]})}
-                  />
+                  <div className="col-span-3 space-y-2">
+                    <Input 
+                      id="idProof" 
+                      type="file" 
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                      onChange={(e) => setNewTenant({...newTenant, id_proof_file: e.target.files[0]})}
+                    />
+                    <FileUploadSecurity />
+                  </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="agreement" className="text-right">Agreement *</Label>
-                  <Input 
-                    id="agreement" 
-                    type="file" 
-                    accept="image/*,.pdf"
-                    className="col-span-3"
-                    onChange={(e) => setNewTenant({...newTenant, agreement_file: e.target.files[0]})}
-                  />
+                  <div className="col-span-3 space-y-2">
+                    <Input 
+                      id="agreement" 
+                      type="file" 
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => setNewTenant({...newTenant, agreement_file: e.target.files[0]})}
+                    />
+                    <FileUploadSecurity acceptedTypes={['.pdf', '.doc', '.docx']} />
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
