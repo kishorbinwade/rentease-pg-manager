@@ -56,6 +56,13 @@ export type Database = {
             foreignKeyName: "complaints_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
+            referencedRelation: "room_availability"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complaints_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
             referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
@@ -140,6 +147,13 @@ export type Database = {
             foreignKeyName: "rent_records_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
+            referencedRelation: "room_availability"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_records_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
             referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
@@ -154,6 +168,7 @@ export type Database = {
       }
       rooms: {
         Row: {
+          capacity: number
           created_at: string
           floor: number | null
           id: string
@@ -165,6 +180,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          capacity?: number
           created_at?: string
           floor?: number | null
           id?: string
@@ -176,6 +192,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          capacity?: number
           created_at?: string
           floor?: number | null
           id?: string
@@ -239,6 +256,13 @@ export type Database = {
             foreignKeyName: "tenants_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
+            referencedRelation: "room_availability"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
             referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
@@ -246,7 +270,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      room_availability: {
+        Row: {
+          available_beds: number | null
+          capacity: number | null
+          created_at: string | null
+          current_occupancy: number | null
+          floor: number | null
+          id: string | null
+          owner_id: string | null
+          rent_amount: number | null
+          room_number: string | null
+          room_type: string | null
+          status: Database["public"]["Enums"]["room_status"] | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_user_role: {
