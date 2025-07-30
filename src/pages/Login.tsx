@@ -5,19 +5,81 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     userType: "owner" // owner or tenant
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login logic here
-    console.log("Login attempt:", formData);
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Logged in successfully!",
+        });
+        // Redirect to dashboard
+        window.location.href = "/dashboard";
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error", 
+        description: "Failed to sign in with Google",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -109,8 +171,8 @@ const Login = () => {
               </div>
 
               {/* Submit Button */}
-              <Button type="submit" className="w-full">
-                Sign In
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing In..." : "Sign In"}
               </Button>
 
               {/* Divider */}
@@ -126,7 +188,13 @@ const Login = () => {
               </div>
 
               {/* Google Sign In */}
-              <Button type="button" variant="outline" className="w-full">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full" 
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+              >
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                   <path
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -145,7 +213,7 @@ const Login = () => {
                     fill="#EA4335"
                   />
                 </svg>
-                Continue with Google
+                {isLoading ? "Signing In..." : "Continue with Google"}
               </Button>
 
               {/* Links */}
