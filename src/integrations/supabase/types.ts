@@ -293,6 +293,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      validate_file_upload: {
+        Args: { file_name: string; file_size: number; mime_type: string }
+        Returns: boolean
+      }
     }
     Enums: {
       complaint_priority: "low" | "medium" | "high"
