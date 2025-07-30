@@ -14,6 +14,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +37,9 @@ const Tenants = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +52,24 @@ const Tenants = () => {
     id_proof_type: "",
     id_proof_file: null,
     agreement_file: null
+  });
+  
+  const [editTenant, setEditTenant] = useState<{
+    id: string;
+    full_name: string;
+    email: string;
+    phone: string;
+    room_id: string;
+    join_date: string;
+    status: "active" | "notice_period" | "inactive";
+  }>({
+    id: "",
+    full_name: "",
+    email: "",
+    phone: "",
+    room_id: "",
+    join_date: "",
+    status: "active"
   });
 
   useEffect(() => {
@@ -264,28 +295,99 @@ const Tenants = () => {
     }
   };
 
-  const handleDeleteTenant = async (tenantId, roomId) => {
+  const handleEditTenant = (tenant: any) => {
+    setEditTenant({
+      id: tenant.id,
+      full_name: tenant.full_name,
+      email: tenant.email,
+      phone: tenant.phone,
+      room_id: tenant.room_id,
+      join_date: tenant.join_date,
+      status: tenant.status as "active" | "notice_period" | "inactive"
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateTenant = async () => {
+    try {
+      // Validate and sanitize inputs
+      const sanitizedData = {
+        fullName: validateAndSanitizeInput(editTenant.full_name, 'Full name'),
+        email: validateAndSanitizeInput(editTenant.email, 'Email'),
+        phone: validateAndSanitizeInput(editTenant.phone, 'Phone'),
+        status: editTenant.status
+      };
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(sanitizedData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Phone format validation (basic)
+      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      if (!phoneRegex.test(sanitizedData.phone.replace(/[\s\-\(\)]/g, ''))) {
+        throw new Error('Please enter a valid phone number');
+      }
+
+      const { error } = await supabase
+        .from('tenants')
+        .update({
+          full_name: sanitizedData.fullName,
+          email: sanitizedData.email,
+          phone: sanitizedData.phone,
+          status: sanitizedData.status
+        })
+        .eq('id', editTenant.id)
+        .eq('owner_id', user?.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Tenant updated successfully",
+      });
+
+      setIsEditDialogOpen(false);
+      fetchTenants();
+    } catch (error) {
+      const errorMessage = error?.message || "Failed to update tenant";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteClick = (tenant: any) => {
+    setSelectedTenant(tenant);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
       const { error } = await supabase
         .from('tenants')
         .delete()
-        .eq('id', tenantId);
+        .eq('id', selectedTenant.id)
+        .eq('owner_id', user?.id);
 
       if (error) throw error;
 
       // Check if room is now empty and update status accordingly
-      if (roomId) {
+      if (selectedTenant.room_id) {
         const { data: roomData } = await supabase
           .from('room_availability')
           .select('capacity, current_occupancy')
-          .eq('id', roomId)
+          .eq('id', selectedTenant.room_id)
           .single();
 
         if (roomData && roomData.current_occupancy === 0) {
           await supabase
             .from('rooms')
             .update({ status: 'vacant' })
-            .eq('id', roomId);
+            .eq('id', selectedTenant.room_id);
         }
       }
 
@@ -294,6 +396,8 @@ const Tenants = () => {
         description: "Tenant deleted successfully",
       });
 
+      setIsDeleteDialogOpen(false);
+      setSelectedTenant(null);
       fetchTenants();
       fetchRooms();
     } catch (error) {
@@ -612,7 +716,12 @@ const Tenants = () => {
                 )}
 
                 <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleEditTenant(tenant)}
+                  >
                     <Edit className="mr-1 h-3 w-3" />
                     Edit
                   </Button>
@@ -630,7 +739,7 @@ const Tenants = () => {
                     variant="outline" 
                     size="sm" 
                     className="text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteTenant(tenant.id, tenant.room_id)}
+                    onClick={() => handleDeleteClick(tenant)}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -675,6 +784,95 @@ const Tenants = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Edit Tenant Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Edit Tenant</DialogTitle>
+              <DialogDescription>
+                Update tenant information. Note: Room and join date cannot be changed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-name" className="text-right">Full Name *</Label>
+                <Input 
+                  id="edit-name" 
+                  placeholder="John Doe" 
+                  className="col-span-3"
+                  value={editTenant.full_name}
+                  onChange={(e) => setEditTenant({...editTenant, full_name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-email" className="text-right">Email *</Label>
+                <Input 
+                  id="edit-email" 
+                  type="email" 
+                  placeholder="john@email.com" 
+                  className="col-span-3"
+                  value={editTenant.email}
+                  onChange={(e) => setEditTenant({...editTenant, email: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-phone" className="text-right">Phone *</Label>
+                <Input 
+                  id="edit-phone" 
+                  placeholder="+91 9876543210" 
+                  className="col-span-3"
+                  value={editTenant.phone}
+                  onChange={(e) => setEditTenant({...editTenant, phone: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-status" className="text-right">Status *</Label>
+                <Select value={editTenant.status} onValueChange={(value: "active" | "notice_period" | "inactive") => setEditTenant({...editTenant, status: value})}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="notice_period">Notice Period</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateTenant}>
+                Update Tenant
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this tenant? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteConfirm}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
