@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, User, DollarSign } from "lucide-react";
+import { Plus, Search, Edit, Trash2, User, DollarSign, Users, Bed } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,13 +35,27 @@ const Rooms = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newRoom, setNewRoom] = useState({
     room_number: "",
     room_type: "",
     rent_amount: "",
-    floor: ""
+    floor: "",
+    capacity: ""
+  });
+  const [editRoom, setEditRoom] = useState({
+    id: "",
+    room_number: "",
+    room_type: "",
+    rent_amount: "",
+    floor: "",
+    capacity: "",
+    status: "vacant" as "occupied" | "vacant" | "under_maintenance"
   });
 
   useEffect(() => {
@@ -47,8 +71,10 @@ const Rooms = () => {
         .select(`
           *,
           tenants(
+            id,
             full_name,
-            phone
+            phone,
+            email
           )
         `)
         .eq('owner_id', user?.id)
@@ -69,7 +95,7 @@ const Rooms = () => {
 
   const handleAddRoom = async () => {
     try {
-      if (!newRoom.room_number || !newRoom.room_type || !newRoom.rent_amount) {
+      if (!newRoom.room_number || !newRoom.room_type || !newRoom.rent_amount || !newRoom.capacity) {
         toast({
           title: "Error",
           description: "Please fill in all required fields",
@@ -85,6 +111,7 @@ const Rooms = () => {
           room_type: newRoom.room_type,
           rent_amount: parseFloat(newRoom.rent_amount),
           floor: newRoom.floor ? parseInt(newRoom.floor) : null,
+          capacity: parseInt(newRoom.capacity),
           owner_id: user?.id,
           status: 'vacant'
         });
@@ -100,7 +127,8 @@ const Rooms = () => {
         room_number: "",
         room_type: "",
         rent_amount: "",
-        floor: ""
+        floor: "",
+        capacity: ""
       });
       setIsAddDialogOpen(false);
       fetchRooms();
@@ -114,11 +142,74 @@ const Rooms = () => {
     }
   };
 
-  const handleDeleteRoom = async (roomId) => {
+  const handleEditRoom = async () => {
     try {
-      // Check if room is occupied
-      const room = rooms.find(r => r.id === roomId);
-      if (room?.status === 'occupied') {
+      if (!editRoom.room_number || !editRoom.room_type || !editRoom.rent_amount || !editRoom.capacity) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('rooms')
+        .update({
+          room_number: editRoom.room_number,
+          room_type: editRoom.room_type,
+          rent_amount: parseFloat(editRoom.rent_amount),
+          floor: editRoom.floor ? parseInt(editRoom.floor) : null,
+          capacity: parseInt(editRoom.capacity),
+          status: editRoom.status as "occupied" | "vacant" | "under_maintenance"
+        })
+        .eq('id', editRoom.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Room updated successfully",
+      });
+
+      setIsEditDialogOpen(false);
+      fetchRooms();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update room",
+        variant: "destructive",
+      });
+      console.error('Error updating room:', error);
+    }
+  };
+
+  const openEditDialog = (room) => {
+    setEditRoom({
+      id: room.id,
+      room_number: room.room_number,
+      room_type: room.room_type,
+      rent_amount: room.rent_amount.toString(),
+      floor: room.floor?.toString() || "",
+      capacity: room.capacity?.toString() || "",
+      status: room.status
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const openDeleteDialog = (room) => {
+    setSelectedRoom(room);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const openTenantDialog = (room) => {
+    setSelectedRoom(room);
+    setIsTenantDialogOpen(true);
+  };
+
+  const handleDeleteRoom = async () => {
+    try {
+      if (selectedRoom?.status === 'occupied') {
         toast({
           title: "Error",
           description: "Cannot delete an occupied room",
@@ -130,7 +221,7 @@ const Rooms = () => {
       const { error } = await supabase
         .from('rooms')
         .delete()
-        .eq('id', roomId);
+        .eq('id', selectedRoom.id);
 
       if (error) throw error;
 
@@ -139,6 +230,7 @@ const Rooms = () => {
         description: "Room deleted successfully",
       });
 
+      setIsDeleteDialogOpen(false);
       fetchRooms();
     } catch (error) {
       toast({
@@ -162,7 +254,7 @@ const Rooms = () => {
   const getStatusBadge = (status) => {
     if (status === "occupied") {
       return <Badge className="bg-occupied text-occupied-foreground">Occupied</Badge>;
-    } else if (status === "maintenance") {
+    } else if (status === "under_maintenance") {
       return <Badge className="bg-warning text-warning-foreground">Maintenance</Badge>;
     }
     return <Badge className="bg-vacant text-vacant-foreground">Vacant</Badge>;
@@ -241,6 +333,17 @@ const Rooms = () => {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="capacity" className="text-right">Capacity *</Label>
+                  <Input 
+                    id="capacity" 
+                    type="number" 
+                    placeholder="2" 
+                    className="col-span-3"
+                    value={newRoom.capacity}
+                    onChange={(e) => setNewRoom({...newRoom, capacity: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="floor" className="text-right">Floor</Label>
                   <Input 
                     id="floor" 
@@ -283,64 +386,92 @@ const Rooms = () => {
               <SelectItem value="all">All Rooms</SelectItem>
               <SelectItem value="vacant">Vacant</SelectItem>
               <SelectItem value="occupied">Occupied</SelectItem>
-              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="under_maintenance">Maintenance</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* Rooms Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredRooms.map((room) => (
-            <Card key={room.id} className="shadow-soft hover:shadow-medium transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg">Room {room.room_number}</CardTitle>
-                {getStatusBadge(room.status)}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Type</p>
-                    <p className="font-medium">{room.room_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Floor</p>
-                    <p className="font-medium">{room.floor || 'N/A'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <DollarSign className="h-4 w-4 text-success" />
-                  <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
-                </div>
-
-                {room.status === "occupied" && room.tenants?.[0] && (
-                  <div className="bg-muted p-3 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">{room.tenants[0].full_name}</span>
+          {filteredRooms.map((room) => {
+            const currentOccupancy = room.tenants?.length || 0;
+            const availableBeds = Math.max(0, (room.capacity || 1) - currentOccupancy);
+            
+            return (
+              <Card 
+                key={room.id} 
+                className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer"
+                onClick={() => openTenantDialog(room)}
+              >
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-lg">Room {room.room_number}</CardTitle>
+                  {getStatusBadge(room.status)}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Type</p>
+                      <p className="font-medium">{room.room_type}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{room.tenants[0].phone}</p>
+                    <div>
+                      <p className="text-muted-foreground">Floor</p>
+                      <p className="font-medium">{room.floor || 'N/A'}</p>
+                    </div>
                   </div>
-                )}
 
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Edit className="mr-1 h-3 w-3" />
-                    Edit
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteRoom(room.id)}
-                    disabled={room.status === 'occupied'}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center space-x-1">
+                        <Users className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium">{room.capacity || 1}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Capacity</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center space-x-1">
+                        <User className="h-3 w-3 text-occupied" />
+                        <span className="font-medium text-occupied">{currentOccupancy}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Occupied</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center space-x-1">
+                        <Bed className="h-3 w-3 text-vacant" />
+                        <span className="font-medium text-vacant">{availableBeds}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Available</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <DollarSign className="h-4 w-4 text-success" />
+                    <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
+                  </div>
+
+                  <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => openEditDialog(room)}
+                    >
+                      <Edit className="mr-1 h-3 w-3" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => openDeleteDialog(room)}
+                      disabled={room.status === 'occupied'}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Summary Stats */}
@@ -372,12 +503,163 @@ const Rooms = () => {
           <Card className="bg-gradient-card shadow-soft">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-warning-foreground mb-1">
-                {rooms.filter(r => r.status === "maintenance").length}
+                {rooms.filter(r => r.status === "under_maintenance").length}
               </div>
               <div className="text-sm text-muted-foreground">Maintenance</div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Edit Room Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Room</DialogTitle>
+              <DialogDescription>
+                Update room details. Make sure all information is accurate.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editRoomNumber" className="text-right">Room Number *</Label>
+                <Input 
+                  id="editRoomNumber" 
+                  placeholder="A-101" 
+                  className="col-span-3"
+                  value={editRoom.room_number}
+                  onChange={(e) => setEditRoom({...editRoom, room_number: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editRoomType" className="text-right">Type *</Label>
+                <Select value={editRoom.room_type} onValueChange={(value) => setEditRoom({...editRoom, room_type: value})}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select room type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Single">Single</SelectItem>
+                    <SelectItem value="Double">Double</SelectItem>
+                    <SelectItem value="Triple">Triple</SelectItem>
+                    <SelectItem value="Dormitory">Dormitory</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editRent" className="text-right">Rent (₹) *</Label>
+                <Input 
+                  id="editRent" 
+                  type="number" 
+                  placeholder="8000" 
+                  className="col-span-3"
+                  value={editRoom.rent_amount}
+                  onChange={(e) => setEditRoom({...editRoom, rent_amount: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editCapacity" className="text-right">Capacity *</Label>
+                <Input 
+                  id="editCapacity" 
+                  type="number" 
+                  placeholder="2" 
+                  className="col-span-3"
+                  value={editRoom.capacity}
+                  onChange={(e) => setEditRoom({...editRoom, capacity: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editFloor" className="text-right">Floor</Label>
+                <Input 
+                  id="editFloor" 
+                  type="number" 
+                  placeholder="1" 
+                  className="col-span-3"
+                  value={editRoom.floor}
+                  onChange={(e) => setEditRoom({...editRoom, floor: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="editStatus" className="text-right">Status</Label>
+                <Select value={editRoom.status} onValueChange={(value: "occupied" | "vacant" | "under_maintenance") => setEditRoom({...editRoom, status: value})}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vacant">Vacant</SelectItem>
+                    <SelectItem value="occupied">Occupied</SelectItem>
+                    <SelectItem value="under_maintenance">Maintenance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditRoom}>
+                Update Room
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Room</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this room? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteRoom} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete Room
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Tenant Details Dialog */}
+        <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Room {selectedRoom?.room_number} - Tenant Details</DialogTitle>
+              <DialogDescription>
+                Current tenant information for this room.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedRoom?.tenants && selectedRoom.tenants.length > 0 ? (
+                <div className="space-y-4">
+                  {selectedRoom.tenants.map((tenant, index) => (
+                    <div key={tenant.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{tenant.full_name}</span>
+                      </div>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p>📱 {tenant.phone}</p>
+                        {tenant.email && <p>✉️ {tenant.email}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No tenants in this room</p>
+                  <p className="text-sm text-muted-foreground mt-1">This room is currently vacant</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setIsTenantDialogOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
