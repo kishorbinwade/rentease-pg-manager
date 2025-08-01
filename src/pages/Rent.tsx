@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, DollarSign, Calendar, Download, CheckCircle, XCircle, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, IndianRupee, Calendar, Download, CheckCircle, XCircle, Clock } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,69 +8,85 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import StatsCard from "@/components/StatsCard";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const Rent = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("2024-07");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [rentRecords, setRentRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data - replace with real data from Supabase
-  const rentRecords = [
-    {
-      id: 1,
-      tenant: "Rahul Sharma",
-      room: "A-101",
-      amount: 8000,
-      dueDate: "2024-07-01",
-      paidDate: "2024-07-02",
-      status: "paid",
-      month: "2024-07",
-      lateFee: 0
-    },
-    {
-      id: 2,
-      tenant: "Priya Singh",
-      room: "B-203",
-      amount: 12000,
-      dueDate: "2024-07-01",
-      paidDate: "2024-06-30",
-      status: "paid",
-      month: "2024-07",
-      lateFee: 0
-    },
-    {
-      id: 3,
-      tenant: "Amit Kumar",
-      room: "C-305",
-      amount: 15000,
-      dueDate: "2024-07-01",
-      paidDate: null,
-      status: "pending",
-      month: "2024-07",
-      lateFee: 100
-    },
-    {
-      id: 4,
-      tenant: "Sneha Patel",
-      room: "A-102",
-      amount: 8000,
-      dueDate: "2024-07-01",
-      paidDate: null,
-      status: "overdue",
-      month: "2024-07",
-      lateFee: 200
+  useEffect(() => {
+    if (user) {
+      fetchRentRecords();
     }
-  ];
+  }, [user, selectedMonth]);
 
-  const filteredRecords = rentRecords.filter(record =>
-    record.tenant.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.room.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchRentRecords = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rent_records')
+        .select(`
+          *,
+          tenants(
+            id,
+            full_name,
+            phone
+          ),
+          rooms(
+            room_number,
+            rent_amount
+          )
+        `)
+        .eq('owner_id', user?.id)
+        .order('due_date', { ascending: false });
+
+      if (error) throw error;
+      setRentRecords(data || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch rent records",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRecords = rentRecords.filter(record => {
+    const matchesSearch = 
+      record.tenants?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.rooms?.room_number?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === "all" || record.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonthRecords = rentRecords.filter(record => 
+    record.due_date?.startsWith(currentMonth)
   );
 
   const stats = {
-    totalRent: rentRecords.reduce((sum, record) => sum + record.amount + record.lateFee, 0),
-    collected: rentRecords.filter(r => r.status === "paid").reduce((sum, record) => sum + record.amount, 0),
-    pending: rentRecords.filter(r => r.status === "pending").reduce((sum, record) => sum + record.amount + record.lateFee, 0),
-    overdue: rentRecords.filter(r => r.status === "overdue").reduce((sum, record) => sum + record.amount + record.lateFee, 0)
+    totalRent: currentMonthRecords.reduce((sum, record) => sum + Number(record.amount || 0), 0),
+    collected: currentMonthRecords.filter(r => r.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0),
+    pending: currentMonthRecords.filter(r => r.status === "pending").reduce((sum, record) => sum + Number(record.amount || 0), 0),
+    overdue: currentMonthRecords.filter(r => r.status === "overdue").reduce((sum, record) => sum + Number(record.amount || 0), 0)
+  };
+
+  const analytics = {
+    totalCollected: stats.collected,
+    totalPending: stats.pending + stats.overdue,
+    paidTenantsCount: currentMonthRecords.filter(r => r.status === "paid").length,
+    unpaidTenantsCount: currentMonthRecords.filter(r => r.status !== "paid").length,
+    collectionPercentage: stats.totalRent > 0 ? Math.round((stats.collected / stats.totalRent) * 100) : 0
   };
 
   const getStatusBadge = (status: string) => {
@@ -90,14 +106,38 @@ const Rent = () => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const handleMarkPaid = (recordId: number) => {
-    // Handle marking rent as paid
-    console.log("Mark as paid:", recordId);
+  const handleMarkPaid = async (recordId: string) => {
+    try {
+      const { error } = await supabase
+        .from('rent_records')
+        .update({ 
+          status: 'paid',
+          paid_date: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', recordId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Rent marked as paid",
+      });
+
+      fetchRentRecords();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update rent status",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleGenerateReceipt = (recordId: number) => {
-    // Handle generating receipt
-    console.log("Generate receipt:", recordId);
+  const handleGenerateReceipt = (recordId: string) => {
+    toast({
+      title: "Info",
+      description: "Receipt generation feature coming soon",
+    });
   };
 
   return (
@@ -120,9 +160,9 @@ const Rent = () => {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
-            title="Total Rent"
+            title="Total Rent (This Month)"
             value={`₹${stats.totalRent.toLocaleString()}`}
-            icon={DollarSign}
+            icon={IndianRupee}
             color="primary"
           />
           <StatsCard
@@ -133,16 +173,52 @@ const Rent = () => {
           />
           <StatsCard
             title="Pending"
-            value={`₹${stats.pending.toLocaleString()}`}
+            value={`₹${(stats.pending + stats.overdue).toLocaleString()}`}
             icon={Clock}
             color="warning"
           />
           <StatsCard
-            title="Overdue"
-            value={`₹${stats.overdue.toLocaleString()}`}
+            title="Collection Rate"
+            value={`${analytics.collectionPercentage}%`}
             icon={XCircle}
-            color="warning"
+            color="success"
           />
+        </div>
+
+        {/* Analytics */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-gradient-card shadow-soft">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl font-bold text-success mb-1">
+                ₹{analytics.totalCollected.toLocaleString()}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Collected This Month</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-card shadow-soft">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl font-bold text-warning mb-1">
+                ₹{analytics.totalPending.toLocaleString()}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Pending Rent</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-card shadow-soft">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl font-bold text-success mb-1">
+                {analytics.paidTenantsCount}
+              </div>
+              <div className="text-sm text-muted-foreground">Paid Tenants</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-card shadow-soft">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl font-bold text-destructive mb-1">
+                {analytics.unpaidTenantsCount}
+              </div>
+              <div className="text-sm text-muted-foreground">Unpaid Tenants</div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}
@@ -166,7 +242,7 @@ const Rent = () => {
               <SelectItem value="2024-05">May 2024</SelectItem>
             </SelectContent>
           </Select>
-          <Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
@@ -184,98 +260,81 @@ const Rent = () => {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Calendar className="h-5 w-5" />
-              <span>Rent Records - {new Date(selectedMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+              <span>Rent Records</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {filteredRecords.map((record) => (
-                <div key={record.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback>{getInitials(record.tenant)}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-foreground">{record.tenant}</p>
-                      <p className="text-sm text-muted-foreground">Room {record.room}</p>
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredRecords.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No rent records found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredRecords.map((record) => (
+                  <div key={record.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback>{getInitials(record.tenants?.full_name || 'N/A')}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-foreground">{record.tenants?.full_name || 'Unknown Tenant'}</p>
+                        <p className="text-sm text-muted-foreground">Room {record.rooms?.room_number || 'N/A'}</p>
+                        {record.tenants?.phone && (
+                          <p className="text-xs text-muted-foreground">{record.tenants.phone}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-6">
+                      <div className="text-right">
+                        <p className="font-semibold text-foreground">
+                          ₹{Number(record.amount || 0).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Due: {new Date(record.due_date).toLocaleDateString()}</p>
+                        {record.paid_date && (
+                          <p className="text-sm text-success">Paid: {new Date(record.paid_date).toLocaleDateString()}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        {getStatusBadge(record.status)}
+                      </div>
+
+                      <div className="flex space-x-2">
+                        {record.status === "paid" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateReceipt(record.id)}
+                          >
+                            <Download className="mr-1 h-3 w-3" />
+                            Receipt
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleMarkPaid(record.id)}
+                          >
+                            <CheckCircle className="mr-1 h-3 w-3" />
+                            Mark Paid
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center space-x-6">
-                    <div className="text-right">
-                      <p className="font-semibold text-foreground">
-                        ₹{(record.amount + record.lateFee).toLocaleString()}
-                      </p>
-                      {record.lateFee > 0 && (
-                        <p className="text-xs text-destructive">+₹{record.lateFee} late fee</p>
-                      )}
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Due: {new Date(record.dueDate).toLocaleDateString()}</p>
-                      {record.paidDate && (
-                        <p className="text-sm text-success">Paid: {new Date(record.paidDate).toLocaleDateString()}</p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      {getStatusBadge(record.status)}
-                    </div>
-
-                    <div className="flex space-x-2">
-                      {record.status === "paid" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateReceipt(record.id)}
-                        >
-                          <Download className="mr-1 h-3 w-3" />
-                          Receipt
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => handleMarkPaid(record.id)}
-                        >
-                          <CheckCircle className="mr-1 h-3 w-3" />
-                          Mark Paid
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Collection Rate */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-success-foreground mb-1">
-                {Math.round((stats.collected / stats.totalRent) * 100)}%
-              </div>
-              <div className="text-sm text-muted-foreground">Collection Rate</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {rentRecords.filter(r => r.status === "paid").length}/{rentRecords.length}
-              </div>
-              <div className="text-sm text-muted-foreground">Tenants Paid</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-destructive mb-1">
-                {rentRecords.filter(r => r.status === "overdue").length}
-              </div>
-              <div className="text-sm text-muted-foreground">Overdue Accounts</div>
-            </CardContent>
-          </Card>
-        </div>
       </main>
     </div>
   );

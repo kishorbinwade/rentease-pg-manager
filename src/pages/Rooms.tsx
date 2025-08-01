@@ -408,49 +408,22 @@ const Rooms = () => {
                   {getStatusBadge(room.status)}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Type</p>
-                      <p className="font-medium">{room.room_type}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Floor</p>
-                      <p className="font-medium">{room.floor || 'N/A'}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="text-center">
-                      <div className="flex items-center justify-center space-x-1">
-                        <Users className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-medium">{room.capacity || 1}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Capacity</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center space-x-1">
-                        <User className="h-3 w-3 text-occupied" />
-                        <span className="font-medium text-occupied">{currentOccupancy}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Occupied</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center space-x-1">
-                        <Bed className="h-3 w-3 text-vacant" />
-                        <span className="font-medium text-vacant">{availableBeds}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Available</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium">
+                      Capacity: {room.capacity || 1} | Occupied: {currentOccupancy} | Vacant: {availableBeds}
+                    </p>
+                    <div className="flex items-center justify-center space-x-2">
                       <IndianRupee className="h-4 w-4 text-success" />
-                      <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
+                      <span className="font-semibold text-success">{Number(room.rent_amount).toLocaleString()}/month</span>
                     </div>
-                    {availableBeds > 0 && room.status === 'vacant' && (
+                  </div>
+
+                  <div className="text-center">
+                    {availableBeds === 0 ? (
+                      <Badge className="bg-occupied text-occupied-foreground">Occupied</Badge>
+                    ) : (
                       <Badge className="bg-vacant text-vacant-foreground">
-                        {availableBeds === 1 ? '1 Bed Vacant' : `${availableBeds} Beds Vacant`}
+                        Vacant - {availableBeds === 1 ? '1 Bed Available' : `${availableBeds} Beds Available`}
                       </Badge>
                     )}
                   </div>
