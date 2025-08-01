@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Rooms from "./pages/Rooms";
 import Tenants from "./pages/Tenants";
+import AllTenants from "./pages/AllTenants";
 import Rent from "./pages/Rent";
 import Complaints from "./pages/Complaints";
 import NotFound from "./pages/NotFound";
@@ -39,6 +40,11 @@ const App = () => (
             <Route path="/tenants" element={
               <ProtectedRoute requireAdmin>
                 <Tenants />
+              </ProtectedRoute>
+            } />
+            <Route path="/all-tenants" element={
+              <ProtectedRoute requireAdmin>
+                <AllTenants />
               </ProtectedRoute>
             } />
             <Route path="/rent" element={

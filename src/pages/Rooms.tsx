@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, User, DollarSign, Users, Bed } from "lucide-react";
+import { Plus, Search, Edit, Trash2, User, IndianRupee, Users, Bed } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -443,9 +443,16 @@ const Rooms = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="h-4 w-4 text-success" />
-                    <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <IndianRupee className="h-4 w-4 text-success" />
+                      <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
+                    </div>
+                    {availableBeds > 0 && room.status === 'vacant' && (
+                      <Badge className="bg-vacant text-vacant-foreground">
+                        {availableBeds === 1 ? '1 Bed Vacant' : `${availableBeds} Beds Vacant`}
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>

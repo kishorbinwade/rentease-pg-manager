@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, AlertCircle, Home } from "lucide-react";
+import { Building2, Users, IndianRupee, AlertCircle, Home } from "lucide-react";
 import Header from "@/components/Header";
 import StatsCard from "@/components/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalRooms: 0,
     occupiedRooms: 0,
@@ -160,7 +162,7 @@ const Dashboard = () => {
           <StatsCard
             title="Rent Collected"
             value={stats.rentCollected}
-            icon={DollarSign}
+            icon={IndianRupee}
             color="success"
           />
           <StatsCard
@@ -176,7 +178,7 @@ const Dashboard = () => {
           <Card className="shadow-soft">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg font-semibold">Recent Tenants</CardTitle>
-              <Button variant="outline" size="sm">View All</Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/all-tenants')}>View All</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -210,7 +212,7 @@ const Dashboard = () => {
           <Card className="shadow-soft">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg font-semibold">Recent Complaints</CardTitle>
-              <Button variant="outline" size="sm">View All</Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/complaints')}>View All</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
