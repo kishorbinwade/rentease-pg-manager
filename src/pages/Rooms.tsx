@@ -87,11 +87,13 @@ const Rooms = () => {
       if (error) throw error;
       
       // Also fetch rooms without any active tenants
+      const roomsWithTenantsIds = data?.map(r => r.id) || [];
+      
       const { data: emptyRooms, error: emptyRoomsError } = await supabase
         .from('rooms')
         .select('*')
         .eq('owner_id', user?.id)
-        .not('id', 'in', `(${data?.map(r => `'${r.id}'`).join(',') || "''"})`)
+        .not('id', 'in', roomsWithTenantsIds.length > 0 ? roomsWithTenantsIds : ['00000000-0000-0000-0000-000000000000'])
         .order('room_number');
 
       if (emptyRoomsError) throw emptyRoomsError;
