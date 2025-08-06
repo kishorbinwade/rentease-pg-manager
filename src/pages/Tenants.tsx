@@ -196,14 +196,14 @@ const Tenants = () => {
         throw new Error('Please enter a valid phone number');
       }
 
-      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.deposit_amount) {
-        throw new Error('Please fill in all required fields including deposit amount');
+      if (!sanitizedData.roomId || !sanitizedData.idProofType || !newTenant.check_in_date) {
+        throw new Error('Please fill in all required fields');
       }
 
       // Validate deposit amount
-      const depositAmount = parseFloat(newTenant.deposit_amount);
+      const depositAmount = parseFloat(newTenant.deposit_amount || "0");
       if (isNaN(depositAmount) || depositAmount < 0) {
-        throw new Error('Please enter a valid deposit amount');
+        throw new Error('Please enter a valid deposit amount (minimum 0)');
       }
 
       // Validate check-in date is not in future
@@ -268,7 +268,7 @@ const Tenants = () => {
           email: sanitizedData.email,
           phone: sanitizedData.phone,
           room_id: sanitizedData.roomId,
-          join_date: sanitizedData.joinDate,
+          join_date: newTenant.check_in_date, // Same as check-in date
           check_in_date: new Date().toISOString(),
           owner_id: user?.id,
           user_id: user?.id, // Ensure RLS compliance
@@ -305,7 +305,7 @@ const Tenants = () => {
         phone: "",
         room_id: "",
         join_date: "",
-        check_in_date: "",
+        check_in_date: new Date().toISOString().split('T')[0],
         id_proof_type: "",
         id_proof_file: null,
         agreement_file: null,
@@ -687,23 +687,17 @@ const Tenants = () => {
                   </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="joinDate" className="text-right">Join Date *</Label>
-                  <Input 
-                    id="joinDate" 
-                    type="date" 
-                    className="col-span-3"
-                    value={newTenant.join_date}
-                    onChange={(e) => setNewTenant({...newTenant, join_date: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="checkInDate" className="text-right">Check-In Date *</Label>
                   <Input 
                     id="checkInDate" 
                     type="date" 
                     className="col-span-3"
-                    value={newTenant.check_in_date || new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setNewTenant({...newTenant, check_in_date: e.target.value})}
+                    value={newTenant.check_in_date}
+                    onChange={(e) => setNewTenant({
+                      ...newTenant, 
+                      check_in_date: e.target.value,
+                      join_date: e.target.value // Same as check-in date
+                    })}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -749,10 +743,16 @@ const Tenants = () => {
                   <Input 
                     id="deposit" 
                     type="number" 
-                    placeholder="Enter deposit amount" 
+                    placeholder="Enter deposit amount (minimum 0)" 
                     className="col-span-3"
                     value={newTenant.deposit_amount}
-                    onChange={(e) => setNewTenant({...newTenant, deposit_amount: e.target.value})}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Only allow valid numbers and empty string
+                      if (value === '' || (!isNaN(parseFloat(value)) && isFinite(parseFloat(value)))) {
+                        setNewTenant({...newTenant, deposit_amount: value});
+                      }
+                    }}
                     min="0"
                     step="0.01"
                   />
