@@ -49,6 +49,8 @@ const Tenants = () => {
     phone: "",
     room_id: "",
     join_date: "",
+    check_in_date: "",
+    check_in_time: "",
     id_proof_type: "",
     id_proof_file: null,
     agreement_file: null
@@ -61,7 +63,10 @@ const Tenants = () => {
     phone: string;
     room_id: string;
     join_date: string;
-    status: "active" | "notice_period" | "inactive";
+    check_in_date: string;
+    check_out_date: string;
+    check_out_time: string;
+    status: "active" | "notice_period" | "inactive" | "checked_out";
   }>({
     id: "",
     full_name: "",
@@ -69,6 +74,9 @@ const Tenants = () => {
     phone: "",
     room_id: "",
     join_date: "",
+    check_in_date: "",
+    check_out_date: "",
+    check_out_time: "",
     status: "active"
   });
 
@@ -183,8 +191,15 @@ const Tenants = () => {
         throw new Error('Please enter a valid phone number');
       }
 
-      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType) {
-        throw new Error('Please fill in all required fields');
+      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.check_in_time) {
+        throw new Error('Please fill in all required fields including check-in date and time');
+      }
+
+      // Validate check-in date is not in future
+      const checkInDateTime = new Date(`${newTenant.check_in_date}T${newTenant.check_in_time}`);
+      const now = new Date();
+      if (checkInDateTime > now) {
+        throw new Error('Check-in date and time cannot be in the future');
       }
 
       if (!newTenant.id_proof_file || !newTenant.agreement_file) {
@@ -243,6 +258,7 @@ const Tenants = () => {
           phone: sanitizedData.phone,
           room_id: sanitizedData.roomId,
           join_date: sanitizedData.joinDate,
+          check_in_date: checkInDateTime.toISOString(),
           owner_id: user?.id,
           user_id: user?.id, // Ensure RLS compliance
           id_proof_url,
@@ -277,6 +293,8 @@ const Tenants = () => {
         phone: "",
         room_id: "",
         join_date: "",
+        check_in_date: "",
+        check_in_time: "",
         id_proof_type: "",
         id_proof_file: null,
         agreement_file: null
@@ -296,6 +314,9 @@ const Tenants = () => {
   };
 
   const handleEditTenant = (tenant: any) => {
+    const checkInDate = tenant.check_in_date ? new Date(tenant.check_in_date) : new Date();
+    const checkOutDate = tenant.check_out_date ? new Date(tenant.check_out_date) : null;
+    
     setEditTenant({
       id: tenant.id,
       full_name: tenant.full_name,
@@ -303,7 +324,10 @@ const Tenants = () => {
       phone: tenant.phone,
       room_id: tenant.room_id,
       join_date: tenant.join_date,
-      status: tenant.status as "active" | "notice_period" | "inactive"
+      check_in_date: checkInDate.toISOString().split('T')[0],
+      check_out_date: checkOutDate ? checkOutDate.toISOString().split('T')[0] : "",
+      check_out_time: checkOutDate ? checkOutDate.toTimeString().slice(0, 5) : "",
+      status: tenant.status as "active" | "notice_period" | "inactive" | "checked_out"
     });
     setIsEditDialogOpen(true);
   };
@@ -330,18 +354,61 @@ const Tenants = () => {
         throw new Error('Please enter a valid phone number');
       }
 
+      let updateData: any = {
+        full_name: sanitizedData.fullName,
+        email: sanitizedData.email,
+        phone: sanitizedData.phone,
+        status: sanitizedData.status
+      };
+
+      // Handle check-out date and time
+      if (editTenant.check_out_date && editTenant.check_out_time) {
+        const checkInDate = new Date(editTenant.check_in_date);
+        const checkOutDateTime = new Date(`${editTenant.check_out_date}T${editTenant.check_out_time}`);
+        
+        if (checkOutDateTime <= checkInDate) {
+          throw new Error('Check-out date and time must be after check-in date and time');
+        }
+
+        updateData.check_out_date = checkOutDateTime.toISOString();
+        updateData.checked_out_by = user?.id;
+        updateData.status = 'checked_out';
+      }
+
       const { error } = await supabase
         .from('tenants')
-        .update({
-          full_name: sanitizedData.fullName,
-          email: sanitizedData.email,
-          phone: sanitizedData.phone,
-          status: sanitizedData.status
-        })
+        .update(updateData)
         .eq('id', editTenant.id)
         .eq('owner_id', user?.id);
 
       if (error) throw error;
+
+      // If tenant is checking out, update room availability
+      if (updateData.check_out_date) {
+        const { data: roomData } = await supabase
+          .from('rooms')
+          .select('capacity')
+          .eq('id', editTenant.room_id)
+          .single();
+
+        if (roomData) {
+          const { data: remainingTenants } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('room_id', editTenant.room_id)
+            .neq('id', editTenant.id)
+            .not('status', 'eq', 'checked_out');
+
+          const remainingCount = remainingTenants?.length || 0;
+          
+          if (remainingCount < roomData.capacity) {
+            await supabase
+              .from('rooms')
+              .update({ status: 'vacant' })
+              .eq('id', editTenant.room_id);
+          }
+        }
+      }
 
       toast({
         title: "Success",
@@ -350,6 +417,7 @@ const Tenants = () => {
 
       setIsEditDialogOpen(false);
       fetchTenants();
+      fetchRooms();
     } catch (error) {
       const errorMessage = error?.message || "Failed to update tenant";
       toast({
@@ -468,11 +536,38 @@ const Tenants = () => {
         return <Badge className="bg-success text-success-foreground">Active</Badge>;
       case "notice_period":
         return <Badge className="bg-warning text-warning-foreground">Notice Period</Badge>;
+      case "checked_out":
+        return <Badge className="bg-muted text-muted-foreground">Checked Out</Badge>;
       case "inactive":
         return <Badge variant="outline">Inactive</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const getStayDuration = (checkInDate: string) => {
+    const checkIn = new Date(checkInDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - checkIn.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 30) {
+      return `${diffDays} Days`;
+    } else if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      return `${months} Months`;
+    } else {
+      const years = Math.floor(diffDays / 365);
+      return `${years} Years`;
+    }
+  };
+
+  const isNewTenant = (checkInDate: string) => {
+    const checkIn = new Date(checkInDate);
+    const today = new Date();
+    checkIn.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return checkIn.getTime() === today.getTime();
   };
 
   const getInitials = (name) => {
@@ -573,6 +668,26 @@ const Tenants = () => {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="checkInDate" className="text-right">Check-In Date *</Label>
+                  <Input 
+                    id="checkInDate" 
+                    type="date" 
+                    className="col-span-3"
+                    value={newTenant.check_in_date || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setNewTenant({...newTenant, check_in_date: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="checkInTime" className="text-right">Check-In Time *</Label>
+                  <Input 
+                    id="checkInTime" 
+                    type="time" 
+                    className="col-span-3"
+                    value={newTenant.check_in_time || new Date().toTimeString().slice(0, 5)}
+                    onChange={(e) => setNewTenant({...newTenant, check_in_time: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="idProofType" className="text-right">ID Proof Type *</Label>
                   <Select value={newTenant.id_proof_type} onValueChange={(value) => setNewTenant({...newTenant, id_proof_type: value})}>
                     <SelectTrigger className="col-span-3">
@@ -642,6 +757,7 @@ const Tenants = () => {
               <SelectItem value="all">All Tenants</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="notice_period">Notice Period</SelectItem>
+              <SelectItem value="checked_out">Checked Out</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
@@ -656,7 +772,12 @@ const Tenants = () => {
                   <AvatarFallback>{getInitials(tenant.full_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <CardTitle className="text-lg">{tenant.full_name}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">{tenant.full_name}</CardTitle>
+                    {tenant.check_in_date && isNewTenant(tenant.check_in_date) && (
+                      <Badge variant="outline" className="text-xs bg-accent text-accent-foreground">New</Badge>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Room {tenant.rooms?.room_number || 'Unknown'}
                   </p>
@@ -677,20 +798,30 @@ const Tenants = () => {
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground mb-1">Join Date</p>
+                    <p className="text-muted-foreground mb-1">Check-In</p>
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-3 w-3 text-muted-foreground" />
-                      <span>{new Date(tenant.join_date).toLocaleDateString()}</span>
+                      <span>{tenant.check_in_date ? new Date(tenant.check_in_date).toLocaleDateString() : 'Not set'}</span>
                     </div>
                   </div>
                   <div>
-                    <p className="text-muted-foreground mb-1">Created</p>
+                    <p className="text-muted-foreground mb-1">Stay Duration</p>
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-3 w-3 text-muted-foreground" />
-                      <span>{new Date(tenant.created_at).toLocaleDateString()}</span>
+                      <span>{tenant.check_in_date ? getStayDuration(tenant.check_in_date) : 'N/A'}</span>
                     </div>
                   </div>
                 </div>
+
+                {tenant.check_out_date && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground mb-1">Check-Out</p>
+                    <div className="flex items-center space-x-1">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <span>{new Date(tenant.check_out_date).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                )}
 
                 {tenant.id_proof_url && (
                   <div className="flex items-center space-x-2 text-sm">
@@ -828,7 +959,7 @@ const Tenants = () => {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="edit-status" className="text-right">Status *</Label>
-                <Select value={editTenant.status} onValueChange={(value: "active" | "notice_period" | "inactive") => setEditTenant({...editTenant, status: value})}>
+                <Select value={editTenant.status} onValueChange={(value: "active" | "notice_period" | "inactive" | "checked_out") => setEditTenant({...editTenant, status: value})}>
                   <SelectTrigger className="col-span-3">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
@@ -836,8 +967,29 @@ const Tenants = () => {
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="notice_period">Notice Period</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="checked_out">Checked Out</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-check-out-date" className="text-right">Check-Out Date</Label>
+                <Input 
+                  id="edit-check-out-date" 
+                  type="date" 
+                  className="col-span-3"
+                  value={editTenant.check_out_date}
+                  onChange={(e) => setEditTenant({...editTenant, check_out_date: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-check-out-time" className="text-right">Check-Out Time</Label>
+                <Input 
+                  id="edit-check-out-time" 
+                  type="time" 
+                  className="col-span-3"
+                  value={editTenant.check_out_time}
+                  onChange={(e) => setEditTenant({...editTenant, check_out_time: e.target.value})}
+                />
               </div>
             </div>
             <div className="flex justify-end space-x-2">

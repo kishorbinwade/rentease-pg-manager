@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { RoomEditDialog } from "@/components/RoomEditDialog";
 
 const Rooms = () => {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ const Rooms = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [editingRoom, setEditingRoom] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newRoom, setNewRoom] = useState({
@@ -185,15 +187,7 @@ const Rooms = () => {
   };
 
   const openEditDialog = (room) => {
-    setEditRoom({
-      id: room.id,
-      room_number: room.room_number,
-      room_type: room.room_type,
-      rent_amount: room.rent_amount.toString(),
-      floor: room.floor?.toString() || "",
-      capacity: room.capacity?.toString() || "",
-      status: room.status
-    });
+    setEditingRoom(room);
     setIsEditDialogOpen(true);
   };
 
@@ -490,97 +484,13 @@ const Rooms = () => {
           </Card>
         </div>
 
-        {/* Edit Room Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Edit Room</DialogTitle>
-              <DialogDescription>
-                Update room details. Make sure all information is accurate.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editRoomNumber" className="text-right">Room Number *</Label>
-                <Input 
-                  id="editRoomNumber" 
-                  placeholder="A-101" 
-                  className="col-span-3"
-                  value={editRoom.room_number}
-                  onChange={(e) => setEditRoom({...editRoom, room_number: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editRoomType" className="text-right">Type *</Label>
-                <Select value={editRoom.room_type} onValueChange={(value) => setEditRoom({...editRoom, room_type: value})}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select room type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Single">Single</SelectItem>
-                    <SelectItem value="Double">Double</SelectItem>
-                    <SelectItem value="Triple">Triple</SelectItem>
-                    <SelectItem value="Dormitory">Dormitory</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editRent" className="text-right">Rent (₹) *</Label>
-                <Input 
-                  id="editRent" 
-                  type="number" 
-                  placeholder="8000" 
-                  className="col-span-3"
-                  value={editRoom.rent_amount}
-                  onChange={(e) => setEditRoom({...editRoom, rent_amount: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editCapacity" className="text-right">Capacity *</Label>
-                <Input 
-                  id="editCapacity" 
-                  type="number" 
-                  placeholder="2" 
-                  className="col-span-3"
-                  value={editRoom.capacity}
-                  onChange={(e) => setEditRoom({...editRoom, capacity: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editFloor" className="text-right">Floor</Label>
-                <Input 
-                  id="editFloor" 
-                  type="number" 
-                  placeholder="1" 
-                  className="col-span-3"
-                  value={editRoom.floor}
-                  onChange={(e) => setEditRoom({...editRoom, floor: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="editStatus" className="text-right">Status</Label>
-                <Select value={editRoom.status} onValueChange={(value: "occupied" | "vacant" | "under_maintenance") => setEditRoom({...editRoom, status: value})}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vacant">Vacant</SelectItem>
-                    <SelectItem value="occupied">Occupied</SelectItem>
-                    <SelectItem value="under_maintenance">Maintenance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEditRoom}>
-                Update Room
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Room Edit Dialog */}
+        <RoomEditDialog
+          room={editingRoom}
+          isOpen={isEditDialogOpen}
+          onClose={() => setIsEditDialogOpen(false)}
+          onUpdate={fetchRooms}
+        />
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

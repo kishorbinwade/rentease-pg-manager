@@ -166,6 +166,51 @@ export type Database = {
           },
         ]
       }
+      room_edit_history: {
+        Row: {
+          edited_at: string
+          edited_by: string
+          field_name: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          room_id: string
+        }
+        Insert: {
+          edited_at?: string
+          edited_by: string
+          field_name: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          room_id: string
+        }
+        Update: {
+          edited_at?: string
+          edited_by?: string
+          field_name?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_edit_history_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "room_availability"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_edit_history_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           capacity: number
@@ -208,6 +253,9 @@ export type Database = {
       tenants: {
         Row: {
           agreement_url: string | null
+          check_in_date: string | null
+          check_out_date: string | null
+          checked_out_by: string | null
           created_at: string
           email: string
           full_name: string
@@ -223,6 +271,9 @@ export type Database = {
         }
         Insert: {
           agreement_url?: string | null
+          check_in_date?: string | null
+          check_out_date?: string | null
+          checked_out_by?: string | null
           created_at?: string
           email: string
           full_name: string
@@ -238,6 +289,9 @@ export type Database = {
         }
         Update: {
           agreement_url?: string | null
+          check_in_date?: string | null
+          check_out_date?: string | null
+          checked_out_by?: string | null
           created_at?: string
           email?: string
           full_name?: string
