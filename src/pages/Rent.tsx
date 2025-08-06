@@ -1,102 +1,165 @@
 import { useState, useEffect } from "react";
-import { Search, IndianRupee, Calendar, Download, CheckCircle, XCircle, Clock } from "lucide-react";
 import Header from "@/components/Header";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import StatsCard from "@/components/StatsCard";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Download, Search, DollarSign, Calendar, AlertCircle, Users } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { PaymentEntryDialog } from "@/components/PaymentEntryDialog";
 
-const Rent = () => {
+interface RentRecord {
+  id: string;
+  tenant_id: string;
+  room_id: string;
+  amount: number;
+  due_date: string;
+  paid_date?: string;
+  status: string;
+  tenants: {
+    id: string;
+    full_name: string;
+    email: string;
+    status: string;
+    rooms: {
+      room_number: string;
+      rent_amount: number;
+    };
+  };
+  latest_payment?: {
+    payment_date: string;
+    rent_amount: number;
+    deposit_amount: number;
+    other_charges: number;
+    payment_method: string;
+  };
+}
+
+export default function Rent() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [statusFilter, setStatusFilter] = useState("all");
-  const [rentRecords, setRentRecords] = useState([]);
+  const [rentRecords, setRentRecords] = useState<RentRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      fetchRentRecords();
-    }
+    fetchRentRecords();
   }, [user, selectedMonth]);
 
   const fetchRentRecords = async () => {
+    if (!user) return;
+
     try {
-      const { data, error } = await supabase
-        .from('rent_records')
+      setLoading(true);
+      
+      // Get the selected month's start and end dates
+      const monthStart = new Date(selectedMonth + '-01');
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+      
+      // Fetch active tenants with room details
+      const { data: tenantsData, error: tenantsError } = await supabase
+        .from('tenants')
         .select(`
-          *,
-          tenants(
-            id,
-            full_name,
-            phone
-          ),
-          rooms(
+          id,
+          full_name,
+          email,
+          status,
+          room_id,
+          rooms!inner (
             room_number,
             rent_amount
           )
         `)
-        .eq('owner_id', user?.id)
-        .order('due_date', { ascending: false });
+        .eq('owner_id', user.id)
+        .eq('status', 'active');
 
-      if (error) throw error;
-      setRentRecords(data || []);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch rent records",
-        variant: "destructive",
+      if (tenantsError) throw tenantsError;
+
+      // Fetch payments for the selected month
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('owner_id', user.id)
+        .gte('payment_month', monthStart.toISOString().split('T')[0])
+        .lt('payment_month', new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1).toISOString().split('T')[0]);
+
+      if (paymentsError) throw paymentsError;
+
+      // Create rent records by combining tenant data with payment status
+      const records: RentRecord[] = (tenantsData || []).map(tenant => {
+        const latestPayment = paymentsData?.find(p => p.tenant_id === tenant.id);
+        const dueDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), 5); // 5th of each month
+        const isPaid = !!latestPayment;
+        const isOverdue = !isPaid && new Date() > dueDate;
+        
+        return {
+          id: `${tenant.id}-${selectedMonth}`,
+          tenant_id: tenant.id,
+          room_id: tenant.room_id,
+          amount: tenant.rooms.rent_amount,
+          due_date: dueDate.toISOString().split('T')[0],
+          paid_date: latestPayment?.payment_date,
+          status: isPaid ? 'paid' : (isOverdue ? 'overdue' : 'pending'),
+          tenants: tenant,
+          latest_payment: latestPayment || undefined
+        };
       });
+
+      setRentRecords(records);
+    } catch (error) {
+      console.error('Error fetching rent records:', error);
+      toast.error('Failed to fetch rent records');
     } finally {
       setLoading(false);
     }
   };
 
+  // Filter records based on search and status
   const filteredRecords = rentRecords.filter(record => {
-    const matchesSearch = 
-      record.tenants?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.rooms?.room_number?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+    const matchesSearch = record.tenants.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         record.tenants.rooms.room_number.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || record.status === statusFilter;
-    
     return matchesSearch && matchesStatus;
   });
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const currentMonthRecords = rentRecords.filter(record => 
-    record.due_date?.startsWith(currentMonth)
-  );
-
+  // Calculate statistics for the current month
   const stats = {
-    totalRent: currentMonthRecords.reduce((sum, record) => sum + Number(record.amount || 0), 0),
-    collected: currentMonthRecords.filter(r => r.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0),
-    pending: currentMonthRecords.filter(r => r.status === "pending").reduce((sum, record) => sum + Number(record.amount || 0), 0),
-    overdue: currentMonthRecords.filter(r => r.status === "overdue").reduce((sum, record) => sum + Number(record.amount || 0), 0)
+    totalRent: filteredRecords.reduce((sum, record) => sum + record.amount, 0),
+    collected: filteredRecords.filter(record => record.status === 'paid').reduce((sum, record) => {
+      return sum + (record.latest_payment?.rent_amount || 0);
+    }, 0),
+    totalDeposits: filteredRecords.reduce((sum, record) => {
+      return sum + (record.latest_payment?.deposit_amount || 0);
+    }, 0),
+    totalOtherCharges: filteredRecords.reduce((sum, record) => {
+      return sum + (record.latest_payment?.other_charges || 0);
+    }, 0),
+    pending: filteredRecords.filter(record => record.status !== 'paid').reduce((sum, record) => sum + record.amount, 0),
+    overdue: filteredRecords.filter(record => record.status === 'overdue').reduce((sum, record) => sum + record.amount, 0)
   };
 
+  // Calculate analytics
   const analytics = {
-    totalCollected: stats.collected,
-    totalPending: stats.pending + stats.overdue,
-    paidTenantsCount: currentMonthRecords.filter(r => r.status === "paid").length,
-    unpaidTenantsCount: currentMonthRecords.filter(r => r.status !== "paid").length,
-    collectionPercentage: stats.totalRent > 0 ? Math.round((stats.collected / stats.totalRent) * 100) : 0
+    collectionRate: stats.totalRent > 0 ? Math.round((stats.collected / stats.totalRent) * 100) : 0,
+    paidTenants: filteredRecords.filter(record => record.status === 'paid').length,
+    pendingTenants: filteredRecords.filter(record => record.status !== 'paid').length,
+    totalTenants: filteredRecords.length
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "paid":
-        return <Badge className="bg-success text-success-foreground">Paid</Badge>;
-      case "pending":
-        return <Badge className="bg-warning text-warning-foreground">Pending</Badge>;
-      case "overdue":
-        return <Badge className="bg-destructive text-destructive-foreground">Overdue</Badge>;
+      case 'paid':
+        return <Badge className="bg-green-100 text-green-800 border-green-300">Paid</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Pending</Badge>;
+      case 'overdue':
+        return <Badge className="bg-red-100 text-red-800 border-red-300">Overdue</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -106,238 +169,170 @@ const Rent = () => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const handleMarkPaid = async (recordId: string) => {
-    try {
-      const { error } = await supabase
-        .from('rent_records')
-        .update({ 
-          status: 'paid',
-          paid_date: new Date().toISOString().split('T')[0]
-        })
-        .eq('id', recordId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Rent marked as paid",
-      });
-
-      fetchRentRecords();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update rent status",
-        variant: "destructive",
-      });
-    }
+  const handlePaymentAdded = () => {
+    fetchRentRecords();
   };
 
   const handleGenerateReceipt = (recordId: string) => {
-    toast({
-      title: "Info",
-      description: "Receipt generation feature coming soon",
-    });
+    toast.success('Receipt generation feature coming soon');
   };
 
   return (
-    <div className="min-h-screen bg-muted">
+    <div className="min-h-screen bg-background">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Rent Management</h1>
-            <p className="text-muted-foreground">Track rent collection and payment status</p>
-          </div>
-          <Button>
-            <Download className="mr-2 h-4 w-4" />
-            Export Report
-          </Button>
-        </div>
-
-        {/* Stats */}
+        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
-            title="Total Rent (This Month)"
+            title="Total Rent"
             value={`₹${stats.totalRent.toLocaleString()}`}
-            icon={IndianRupee}
-            color="primary"
+            icon={DollarSign}
+            trend={{ value: `${analytics.collectionRate}%`, isPositive: analytics.collectionRate > 70 }}
           />
           <StatsCard
             title="Collected"
             value={`₹${stats.collected.toLocaleString()}`}
-            icon={CheckCircle}
-            color="success"
+            icon={DollarSign}
+            trend={{ value: `${analytics.paidTenants} tenants`, isPositive: true }}
           />
           <StatsCard
-            title="Pending"
-            value={`₹${(stats.pending + stats.overdue).toLocaleString()}`}
-            icon={Clock}
-            color="warning"
+            title="Total Deposits"
+            value={`₹${stats.totalDeposits.toLocaleString()}`}
+            icon={DollarSign}
+            trend={{ value: "0%", isPositive: true }}
           />
           <StatsCard
-            title="Collection Rate"
-            value={`${analytics.collectionPercentage}%`}
-            icon={XCircle}
-            color="success"
+            title="Other Charges"
+            value={`₹${stats.totalOtherCharges.toLocaleString()}`}
+            icon={DollarSign}
+            trend={{ value: "0%", isPositive: true }}
           />
         </div>
 
-        {/* Analytics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-success mb-1">
-                ₹{analytics.totalCollected.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground">Total Collected This Month</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-warning mb-1">
-                ₹{analytics.totalPending.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground">Total Pending Rent</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-success mb-1">
-                {analytics.paidTenantsCount}
-              </div>
-              <div className="text-sm text-muted-foreground">Paid Tenants</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card shadow-soft">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold text-destructive mb-1">
-                {analytics.unpaidTenantsCount}
-              </div>
-              <div className="text-sm text-muted-foreground">Unpaid Tenants</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder="Search tenants, rooms..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        {/* Analytics Cards */}
+        <div className="mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader className="text-center">
+                <h3 className="text-lg font-semibold text-secondary">Collection Rate</h3>
+                <p className="text-3xl font-bold text-primary">{analytics.collectionRate}%</p>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="text-center">
+                <h3 className="text-lg font-semibold text-secondary">Pending Rent</h3>
+                <p className="text-3xl font-bold text-orange-500">₹{stats.pending.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">{analytics.pendingTenants} tenants</p>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="text-center">
+                <h3 className="text-lg font-semibold text-secondary">Overdue</h3>
+                <p className="text-3xl font-bold text-destructive">₹{stats.overdue.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">{filteredRecords.filter(r => r.status === 'overdue').length} tenants</p>
+              </CardHeader>
+            </Card>
           </div>
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select month" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2024-07">July 2024</SelectItem>
-              <SelectItem value="2024-06">June 2024</SelectItem>
-              <SelectItem value="2024-05">May 2024</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
-        {/* Rent Records */}
-        <Card className="shadow-soft">
+        {/* Rent Management */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5" />
-              <span>Rent Records</span>
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-xl font-semibold">Rent Management</h2>
+              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+                <PaymentEntryDialog onPaymentAdded={handlePaymentAdded} />
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <Input
+                    placeholder="Search tenants..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-full sm:w-[200px]"
+                  />
+                </div>
+                <Input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-full sm:w-[150px]"
+                />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[120px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : filteredRecords.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No rent records found</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredRecords.map((record) => (
-                  <div key={record.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+            <div className="space-y-4">
+              {loading ? (
+                <div className="text-center py-8">Loading rent records...</div>
+              ) : filteredRecords.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No rent records found</div>
+              ) : (
+                filteredRecords.map((record) => (
+                  <div 
+                    key={record.id} 
+                    className={`flex items-center justify-between p-4 border rounded-lg ${
+                      record.status === 'overdue' ? 'border-destructive bg-destructive/5' : ''
+                    }`}
+                  >
                     <div className="flex items-center space-x-4">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback>{getInitials(record.tenants?.full_name || 'N/A')}</AvatarFallback>
+                      <Avatar>
+                        <AvatarFallback>
+                          {getInitials(record.tenants.full_name)}
+                        </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium text-foreground">{record.tenants?.full_name || 'Unknown Tenant'}</p>
-                        <p className="text-sm text-muted-foreground">Room {record.rooms?.room_number || 'N/A'}</p>
-                        {record.tenants?.phone && (
-                          <p className="text-xs text-muted-foreground">{record.tenants.phone}</p>
+                        <h3 className="font-medium">{record.tenants.full_name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Room {record.tenants.rooms.room_number} • Due: {new Date(record.due_date).toLocaleDateString()}
+                        </p>
+                        {record.latest_payment && (
+                          <p className="text-xs text-green-600">
+                            Paid: ₹{record.latest_payment.rent_amount} on {new Date(record.latest_payment.payment_date).toLocaleDateString()}
+                          </p>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-6">
+                    <div className="flex items-center space-x-4">
                       <div className="text-right">
-                        <p className="font-semibold text-foreground">
-                          ₹{Number(record.amount || 0).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Due: {new Date(record.due_date).toLocaleDateString()}</p>
-                        {record.paid_date && (
-                          <p className="text-sm text-success">Paid: {new Date(record.paid_date).toLocaleDateString()}</p>
+                        <p className="font-medium">₹{record.amount.toLocaleString()}</p>
+                        <p className="text-sm text-muted-foreground">Monthly Rent</p>
+                        {record.latest_payment && (record.latest_payment.deposit_amount > 0 || record.latest_payment.other_charges > 0) && (
+                          <p className="text-xs text-muted-foreground">
+                            {record.latest_payment.deposit_amount > 0 && `Deposit: ₹${record.latest_payment.deposit_amount}`}
+                            {record.latest_payment.other_charges > 0 && ` • Other: ₹${record.latest_payment.other_charges}`}
+                          </p>
                         )}
                       </div>
-
-                      <div className="flex items-center space-x-2">
-                        {getStatusBadge(record.status)}
-                      </div>
-
-                      <div className="flex space-x-2">
-                        {record.status === "paid" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleGenerateReceipt(record.id)}
-                          >
-                            <Download className="mr-1 h-3 w-3" />
-                            Receipt
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkPaid(record.id)}
-                          >
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Mark Paid
-                          </Button>
-                        )}
+                      {getStatusBadge(record.status)}
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleGenerateReceipt(record.id)}>
+                          Receipt
+                        </Button>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
-
       </main>
     </div>
   );
-};
-
-export default Rent;
+}

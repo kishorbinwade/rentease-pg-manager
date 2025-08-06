@@ -75,6 +75,51 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          created_at: string
+          deposit_amount: number | null
+          id: string
+          other_charges: number | null
+          owner_id: string
+          payment_date: string
+          payment_method: string
+          payment_month: string
+          remarks: string | null
+          rent_amount: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deposit_amount?: number | null
+          id?: string
+          other_charges?: number | null
+          owner_id: string
+          payment_date?: string
+          payment_method: string
+          payment_month: string
+          remarks?: string | null
+          rent_amount: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deposit_amount?: number | null
+          id?: string
+          other_charges?: number | null
+          owner_id?: string
+          payment_date?: string
+          payment_method?: string
+          payment_month?: string
+          remarks?: string | null
+          rent_amount?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -356,7 +401,7 @@ export type Database = {
       complaint_priority: "low" | "medium" | "high"
       complaint_status: "open" | "in_progress" | "resolved"
       room_status: "occupied" | "vacant" | "under_maintenance"
-      tenant_status: "active" | "notice_period" | "inactive"
+      tenant_status: "active" | "notice_period" | "inactive" | "checked_out"
       user_role: "admin" | "tenant"
     }
     CompositeTypes: {
@@ -488,7 +533,7 @@ export const Constants = {
       complaint_priority: ["low", "medium", "high"],
       complaint_status: ["open", "in_progress", "resolved"],
       room_status: ["occupied", "vacant", "under_maintenance"],
-      tenant_status: ["active", "notice_period", "inactive"],
+      tenant_status: ["active", "notice_period", "inactive", "checked_out"],
       user_role: ["admin", "tenant"],
     },
   },
