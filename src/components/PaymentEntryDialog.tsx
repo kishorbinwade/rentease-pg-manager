@@ -128,7 +128,7 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button data-payment-trigger>
           <Plus className="h-4 w-4 mr-2" />
           Add Payment
         </Button>
@@ -141,7 +141,7 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
           <div>
             <Label htmlFor="tenant">Tenant</Label>
             <Select value={formData.tenant_id} onValueChange={handleTenantChange}>
-              <SelectTrigger>
+              <SelectTrigger data-tenant-select>
                 <SelectValue placeholder="Select tenant" />
               </SelectTrigger>
               <SelectContent>

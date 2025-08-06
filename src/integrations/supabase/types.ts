@@ -302,6 +302,9 @@ export type Database = {
           check_out_date: string | null
           checked_out_by: string | null
           created_at: string
+          deposit_amount: number | null
+          deposit_return_amount: number | null
+          deposit_return_status: string | null
           email: string
           full_name: string
           id: string
@@ -320,6 +323,9 @@ export type Database = {
           check_out_date?: string | null
           checked_out_by?: string | null
           created_at?: string
+          deposit_amount?: number | null
+          deposit_return_amount?: number | null
+          deposit_return_status?: string | null
           email: string
           full_name: string
           id?: string
@@ -338,6 +344,9 @@ export type Database = {
           check_out_date?: string | null
           checked_out_by?: string | null
           created_at?: string
+          deposit_amount?: number | null
+          deposit_return_amount?: number | null
+          deposit_return_status?: string | null
           email?: string
           full_name?: string
           id?: string

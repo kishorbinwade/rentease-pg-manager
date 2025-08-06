@@ -53,7 +53,8 @@ const Tenants = () => {
     check_in_time: "",
     id_proof_type: "",
     id_proof_file: null,
-    agreement_file: null
+    agreement_file: null,
+    deposit_amount: ""
   });
   
   const [editTenant, setEditTenant] = useState<{
@@ -67,6 +68,9 @@ const Tenants = () => {
     check_out_date: string;
     check_out_time: string;
     status: "active" | "notice_period" | "inactive" | "checked_out";
+    deposit_amount: string;
+    deposit_return_amount: string;
+    deposit_return_status: string;
   }>({
     id: "",
     full_name: "",
@@ -77,7 +81,10 @@ const Tenants = () => {
     check_in_date: "",
     check_out_date: "",
     check_out_time: "",
-    status: "active"
+    status: "active",
+    deposit_amount: "",
+    deposit_return_amount: "",
+    deposit_return_status: "pending"
   });
 
   useEffect(() => {
@@ -191,8 +198,14 @@ const Tenants = () => {
         throw new Error('Please enter a valid phone number');
       }
 
-      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.check_in_time) {
-        throw new Error('Please fill in all required fields including check-in date and time');
+      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.check_in_time || !newTenant.deposit_amount) {
+        throw new Error('Please fill in all required fields including deposit amount');
+      }
+
+      // Validate deposit amount
+      const depositAmount = parseFloat(newTenant.deposit_amount);
+      if (isNaN(depositAmount) || depositAmount < 0) {
+        throw new Error('Please enter a valid deposit amount');
       }
 
       // Validate check-in date is not in future
@@ -263,7 +276,8 @@ const Tenants = () => {
           user_id: user?.id, // Ensure RLS compliance
           id_proof_url,
           agreement_url,
-          status: 'active'
+          status: 'active',
+          deposit_amount: depositAmount
         });
 
       if (error) throw error;
@@ -297,7 +311,8 @@ const Tenants = () => {
         check_in_time: "",
         id_proof_type: "",
         id_proof_file: null,
-        agreement_file: null
+        agreement_file: null,
+        deposit_amount: ""
       });
       setIsAddDialogOpen(false);
       fetchTenants();
@@ -327,7 +342,10 @@ const Tenants = () => {
       check_in_date: checkInDate.toISOString().split('T')[0],
       check_out_date: checkOutDate ? checkOutDate.toISOString().split('T')[0] : "",
       check_out_time: checkOutDate ? checkOutDate.toTimeString().slice(0, 5) : "",
-      status: tenant.status as "active" | "notice_period" | "inactive" | "checked_out"
+      status: tenant.status as "active" | "notice_period" | "inactive" | "checked_out",
+      deposit_amount: tenant.deposit_amount?.toString() || "0",
+      deposit_return_amount: tenant.deposit_return_amount?.toString() || "0",
+      deposit_return_status: tenant.deposit_return_status || "pending"
     });
     setIsEditDialogOpen(true);
   };
@@ -370,9 +388,24 @@ const Tenants = () => {
           throw new Error('Check-out date and time must be after check-in date and time');
         }
 
+        // Validate deposit return amount
+        const depositReturnAmount = parseFloat(editTenant.deposit_return_amount);
+        const originalDeposit = parseFloat(editTenant.deposit_amount);
+        
+        if (isNaN(depositReturnAmount) || depositReturnAmount < 0) {
+          throw new Error('Please enter a valid deposit return amount');
+        }
+        
+        if (depositReturnAmount > originalDeposit) {
+          throw new Error('Deposit return amount cannot exceed original deposit');
+        }
+
         updateData.check_out_date = checkOutDateTime.toISOString();
         updateData.checked_out_by = user?.id;
         updateData.status = 'checked_out';
+        updateData.deposit_return_amount = depositReturnAmount;
+        updateData.deposit_return_status = depositReturnAmount === originalDeposit ? 'full' : 
+                                          depositReturnAmount === 0 ? 'none' : 'partial';
       }
 
       const { error } = await supabase
@@ -725,6 +758,19 @@ const Tenants = () => {
                     <FileUploadSecurity acceptedTypes={['.pdf', '.doc', '.docx']} />
                   </div>
                 </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="deposit" className="text-right">Deposit Amount *</Label>
+                  <Input 
+                    id="deposit" 
+                    type="number" 
+                    placeholder="Enter deposit amount" 
+                    className="col-span-3"
+                    value={newTenant.deposit_amount}
+                    onChange={(e) => setNewTenant({...newTenant, deposit_amount: e.target.value})}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -991,6 +1037,55 @@ const Tenants = () => {
                   onChange={(e) => setEditTenant({...editTenant, check_out_time: e.target.value})}
                 />
               </div>
+              
+              {/* Deposit Information */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="deposit-amount" className="text-right">Original Deposit</Label>
+                <Input 
+                  id="deposit-amount" 
+                  type="number" 
+                  className="col-span-3"
+                  value={editTenant.deposit_amount}
+                  disabled
+                  placeholder="Original deposit amount"
+                />
+              </div>
+              
+              {editTenant.check_out_date && (
+                <>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="deposit-return" className="text-right">Deposit Return Amount</Label>
+                    <Input 
+                      id="deposit-return" 
+                      type="number" 
+                      className="col-span-3"
+                      value={editTenant.deposit_return_amount}
+                      onChange={(e) => setEditTenant({...editTenant, deposit_return_amount: e.target.value})}
+                      placeholder="Amount to return"
+                      min="0"
+                      max={editTenant.deposit_amount}
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="deposit-status" className="text-right">Deposit Return Status</Label>
+                    <Select 
+                      value={editTenant.deposit_return_status} 
+                      onValueChange={(value) => setEditTenant({...editTenant, deposit_return_status: value})}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select deposit return status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full">Full Return</SelectItem>
+                        <SelectItem value="partial">Partial Return (Maintenance Deduction)</SelectItem>
+                        <SelectItem value="none">No Return (Kept for Damages)</SelectItem>
+                        <SelectItem value="pending">Pending Processing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>

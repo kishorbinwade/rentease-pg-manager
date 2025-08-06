@@ -216,7 +216,35 @@ export default function Rent() {
             <Card>
               <CardHeader className="text-center">
                 <h3 className="text-lg font-semibold text-secondary">Collection Rate</h3>
-                <p className="text-3xl font-bold text-primary">{analytics.collectionRate}%</p>
+                <div className="relative w-32 h-32 mx-auto">
+                  <svg className="w-32 h-32" viewBox="0 0 42 42">
+                    <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="hsl(var(--muted))" strokeWidth="3"/>
+                    <circle 
+                      cx="21" 
+                      cy="21" 
+                      r="15.91549430918954" 
+                      fill="transparent" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth="3"
+                      strokeDasharray={`${analytics.collectionRate} ${100 - analytics.collectionRate}`}
+                      strokeDashoffset="25"
+                      className="transition-all duration-300"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-primary">{analytics.collectionRate}%</span>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-primary"></div>
+                    <span className="text-sm">Collected: ₹{stats.collected.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-muted"></div>
+                    <span className="text-sm">Pending: ₹{stats.pending.toLocaleString()}</span>
+                  </div>
+                </div>
               </CardHeader>
             </Card>
             <Card>
@@ -242,7 +270,9 @@ export default function Rent() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Rent Management</h2>
               <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-                <PaymentEntryDialog onPaymentAdded={handlePaymentAdded} />
+                <div data-payment-dialog>
+                  <PaymentEntryDialog onPaymentAdded={handlePaymentAdded} />
+                </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
@@ -286,9 +316,40 @@ export default function Rent() {
                 filteredRecords.map((record) => (
                   <div 
                     key={record.id} 
-                    className={`flex items-center justify-between p-4 border rounded-lg ${
-                      record.status === 'overdue' ? 'border-destructive bg-destructive/5' : ''
+                    className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
+                      record.status === 'overdue' ? 'border-destructive bg-destructive/5' : 
+                      record.status === 'pending' ? 'border-destructive bg-destructive/5 cursor-pointer hover:bg-destructive/10' : ''
                     }`}
+                    onClick={record.status !== 'paid' ? () => {
+                      // Open payment dialog with pre-filled data
+                      const dialog = document.querySelector('[data-payment-dialog]') as HTMLElement;
+                      if (dialog) {
+                        // Pre-fill tenant
+                        const tenantSelect = dialog.querySelector('[data-tenant-select]') as any;
+                        if (tenantSelect) {
+                          tenantSelect.value = record.tenant_id;
+                        }
+                        
+                        // Trigger payment dialog opening
+                        const paymentButton = document.querySelector('[data-payment-trigger]') as HTMLButtonElement;
+                        if (paymentButton) {
+                          paymentButton.click();
+                          
+                          // After a small delay, fill the form
+                          setTimeout(() => {
+                            const forms = document.querySelectorAll('input');
+                            forms.forEach(input => {
+                              if (input.placeholder?.includes('Rent Amount')) {
+                                input.value = record.amount.toString();
+                              }
+                              if (input.type === 'month') {
+                                input.value = selectedMonth;
+                              }
+                            });
+                          }, 100);
+                        }
+                      }
+                    } : undefined}
                   >
                     <div className="flex items-center space-x-4">
                       <Avatar>
