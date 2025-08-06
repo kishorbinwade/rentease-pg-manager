@@ -68,44 +68,40 @@ const Rooms = () => {
 
   const fetchRooms = async () => {
     try {
-      const { data, error } = await supabase
-        .from('rooms')
-        .select(`
-          *,
-          tenants!inner (
-            id,
-            full_name,
-            phone,
-            email,
-            status
-          )
-        `)
-        .eq('owner_id', user?.id)
-        .eq('tenants.status', 'active')
-        .order('room_number');
-
-      if (error) throw error;
-      
-      // Also fetch rooms without any active tenants
-      const roomsWithTenantsIds = data?.map(r => r.id) || [];
-      
-      const { data: emptyRooms, error: emptyRoomsError } = await supabase
+      // First, fetch all rooms for the owner
+      const { data: allRooms, error: allRoomsError } = await supabase
         .from('rooms')
         .select('*')
         .eq('owner_id', user?.id)
-        .not('id', 'in', roomsWithTenantsIds.length > 0 ? roomsWithTenantsIds : ['00000000-0000-0000-0000-000000000000'])
         .order('room_number');
 
-      if (emptyRoomsError) throw emptyRoomsError;
+      if (allRoomsError) throw allRoomsError;
 
-      // Combine rooms with tenants and empty rooms
-      const allRooms = [
-        ...(data || []),
-        ...(emptyRooms || []).map(room => ({ ...room, tenants: [] }))
-      ].sort((a, b) => a.room_number.localeCompare(b.room_number));
+      // Then, fetch all active tenants for these rooms
+      const { data: activeTenants, error: tenantsError } = await supabase
+        .from('tenants')
+        .select(`
+          id,
+          full_name,
+          phone,
+          email,
+          status,
+          room_id
+        `)
+        .eq('owner_id', user?.id)
+        .eq('status', 'active');
 
-      setRooms(allRooms);
+      if (tenantsError) throw tenantsError;
+
+      // Combine rooms with their active tenants
+      const roomsWithTenants = allRooms?.map(room => ({
+        ...room,
+        tenants: activeTenants?.filter(tenant => tenant.room_id === room.id) || []
+      })) || [];
+
+      setRooms(roomsWithTenants);
     } catch (error) {
+      console.error('Error fetching rooms:', error);
       toast({
         title: "Error",
         description: "Failed to fetch rooms",
