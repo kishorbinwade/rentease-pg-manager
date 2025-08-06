@@ -47,6 +47,28 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
     }
   }, [open]);
 
+  useEffect(() => {
+    const handleOpenPaymentDialog = (event: CustomEvent) => {
+      const { tenantId, tenantName, roomNumber, rentAmount, paymentMonth } = event.detail;
+      
+      setFormData(prev => ({
+        ...prev,
+        tenant_id: tenantId,
+        rent_amount: rentAmount.toString(),
+        payment_month: paymentMonth + "-01",
+        payment_date: new Date().toISOString().split('T')[0]
+      }));
+      
+      setOpen(true);
+    };
+
+    window.addEventListener('openPaymentDialog', handleOpenPaymentDialog as EventListener);
+    
+    return () => {
+      window.removeEventListener('openPaymentDialog', handleOpenPaymentDialog as EventListener);
+    };
+  }, []);
+
   const fetchTenants = async () => {
     if (!user) return;
 
@@ -188,16 +210,6 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
             />
           </div>
 
-          <div>
-            <Label htmlFor="deposit_amount">Deposit Amount (Optional)</Label>
-            <Input
-              id="deposit_amount"
-              type="number"
-              step="0.01"
-              value={formData.deposit_amount}
-              onChange={(e) => setFormData(prev => ({ ...prev, deposit_amount: e.target.value }))}
-            />
-          </div>
 
           <div>
             <Label htmlFor="other_charges">Other Charges (Optional)</Label>

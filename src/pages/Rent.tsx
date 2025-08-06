@@ -241,7 +241,7 @@ export default function Rent() {
                     <span className="text-sm">Collected: ₹{stats.collected.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-center space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-muted"></div>
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
                     <span className="text-sm">Pending: ₹{stats.pending.toLocaleString()}</span>
                   </div>
                 </div>
@@ -321,34 +321,17 @@ export default function Rent() {
                       record.status === 'pending' ? 'border-destructive bg-destructive/5 cursor-pointer hover:bg-destructive/10' : ''
                     }`}
                     onClick={record.status !== 'paid' ? () => {
-                      // Open payment dialog with pre-filled data
-                      const dialog = document.querySelector('[data-payment-dialog]') as HTMLElement;
-                      if (dialog) {
-                        // Pre-fill tenant
-                        const tenantSelect = dialog.querySelector('[data-tenant-select]') as any;
-                        if (tenantSelect) {
-                          tenantSelect.value = record.tenant_id;
+                      // Create an event with tenant data
+                      const event = new CustomEvent('openPaymentDialog', {
+                        detail: {
+                          tenantId: record.tenant_id,
+                          tenantName: record.tenants.full_name,
+                          roomNumber: record.tenants.rooms.room_number,
+                          rentAmount: record.amount,
+                          paymentMonth: selectedMonth
                         }
-                        
-                        // Trigger payment dialog opening
-                        const paymentButton = document.querySelector('[data-payment-trigger]') as HTMLButtonElement;
-                        if (paymentButton) {
-                          paymentButton.click();
-                          
-                          // After a small delay, fill the form
-                          setTimeout(() => {
-                            const forms = document.querySelectorAll('input');
-                            forms.forEach(input => {
-                              if (input.placeholder?.includes('Rent Amount')) {
-                                input.value = record.amount.toString();
-                              }
-                              if (input.type === 'month') {
-                                input.value = selectedMonth;
-                              }
-                            });
-                          }, 100);
-                        }
-                      }
+                      });
+                      window.dispatchEvent(event);
                     } : undefined}
                   >
                     <div className="flex items-center space-x-4">

@@ -100,6 +100,7 @@ const Tenants = () => {
         .from('tenants')
         .select('*, rooms(room_number)')
         .eq('owner_id', user?.id)
+        .neq('status', 'checked_out')
         .order('created_at', { ascending: false });
 
       if (error) throw error;

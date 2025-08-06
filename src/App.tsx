@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Rooms from "./pages/Rooms";
 import Tenants from "./pages/Tenants";
 import AllTenants from "./pages/AllTenants";
+import PastTenants from "./pages/PastTenants";
 import Rent from "./pages/Rent";
 import Complaints from "./pages/Complaints";
 import NotFound from "./pages/NotFound";
@@ -45,6 +46,11 @@ const App = () => (
             <Route path="/all-tenants" element={
               <ProtectedRoute requireAdmin>
                 <AllTenants />
+              </ProtectedRoute>
+            } />
+            <Route path="/past-tenants" element={
+              <ProtectedRoute requireAdmin>
+                <PastTenants />
               </ProtectedRoute>
             } />
             <Route path="/rent" element={
