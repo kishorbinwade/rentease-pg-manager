@@ -50,7 +50,6 @@ const Tenants = () => {
     room_id: "",
     join_date: "",
     check_in_date: "",
-    check_in_time: "",
     id_proof_type: "",
     id_proof_file: null,
     agreement_file: null,
@@ -66,7 +65,6 @@ const Tenants = () => {
     join_date: string;
     check_in_date: string;
     check_out_date: string;
-    check_out_time: string;
     status: "active" | "notice_period" | "inactive" | "checked_out";
     deposit_amount: string;
     deposit_return_amount: string;
@@ -80,7 +78,6 @@ const Tenants = () => {
     join_date: "",
     check_in_date: "",
     check_out_date: "",
-    check_out_time: "",
     status: "active",
     deposit_amount: "",
     deposit_return_amount: "",
@@ -199,7 +196,7 @@ const Tenants = () => {
         throw new Error('Please enter a valid phone number');
       }
 
-      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.check_in_time || !newTenant.deposit_amount) {
+      if (!sanitizedData.roomId || !sanitizedData.joinDate || !sanitizedData.idProofType || !newTenant.check_in_date || !newTenant.deposit_amount) {
         throw new Error('Please fill in all required fields including deposit amount');
       }
 
@@ -210,10 +207,10 @@ const Tenants = () => {
       }
 
       // Validate check-in date is not in future
-      const checkInDateTime = new Date(`${newTenant.check_in_date}T${newTenant.check_in_time}`);
+      const checkInDate = new Date(newTenant.check_in_date);
       const now = new Date();
-      if (checkInDateTime > now) {
-        throw new Error('Check-in date and time cannot be in the future');
+      if (checkInDate > now) {
+        throw new Error('Check-in date cannot be in the future');
       }
 
       if (!newTenant.id_proof_file || !newTenant.agreement_file) {
@@ -272,7 +269,7 @@ const Tenants = () => {
           phone: sanitizedData.phone,
           room_id: sanitizedData.roomId,
           join_date: sanitizedData.joinDate,
-          check_in_date: checkInDateTime.toISOString(),
+          check_in_date: new Date().toISOString(),
           owner_id: user?.id,
           user_id: user?.id, // Ensure RLS compliance
           id_proof_url,
@@ -309,7 +306,6 @@ const Tenants = () => {
         room_id: "",
         join_date: "",
         check_in_date: "",
-        check_in_time: "",
         id_proof_type: "",
         id_proof_file: null,
         agreement_file: null,
@@ -342,7 +338,6 @@ const Tenants = () => {
       join_date: tenant.join_date,
       check_in_date: checkInDate.toISOString().split('T')[0],
       check_out_date: checkOutDate ? checkOutDate.toISOString().split('T')[0] : "",
-      check_out_time: checkOutDate ? checkOutDate.toTimeString().slice(0, 5) : "",
       status: tenant.status as "active" | "notice_period" | "inactive" | "checked_out",
       deposit_amount: tenant.deposit_amount?.toString() || "0",
       deposit_return_amount: tenant.deposit_return_amount?.toString() || "0",
@@ -380,13 +375,13 @@ const Tenants = () => {
         status: sanitizedData.status
       };
 
-      // Handle check-out date and time
-      if (editTenant.check_out_date && editTenant.check_out_time) {
+      // Handle check-out date
+      if (editTenant.check_out_date) {
         const checkInDate = new Date(editTenant.check_in_date);
-        const checkOutDateTime = new Date(`${editTenant.check_out_date}T${editTenant.check_out_time}`);
+        const checkOutDate = new Date(editTenant.check_out_date);
         
-        if (checkOutDateTime <= checkInDate) {
-          throw new Error('Check-out date and time must be after check-in date and time');
+        if (checkOutDate <= checkInDate) {
+          throw new Error('Check-out date must be after check-in date');
         }
 
         // Validate deposit return amount
@@ -401,7 +396,7 @@ const Tenants = () => {
           throw new Error('Deposit return amount cannot exceed original deposit');
         }
 
-        updateData.check_out_date = checkOutDateTime.toISOString();
+        updateData.check_out_date = new Date().toISOString();
         updateData.checked_out_by = user?.id;
         updateData.status = 'checked_out';
         updateData.deposit_return_amount = depositReturnAmount;
@@ -712,16 +707,6 @@ const Tenants = () => {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="checkInTime" className="text-right">Check-In Time *</Label>
-                  <Input 
-                    id="checkInTime" 
-                    type="time" 
-                    className="col-span-3"
-                    value={newTenant.check_in_time || new Date().toTimeString().slice(0, 5)}
-                    onChange={(e) => setNewTenant({...newTenant, check_in_time: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="idProofType" className="text-right">ID Proof Type *</Label>
                   <Select value={newTenant.id_proof_type} onValueChange={(value) => setNewTenant({...newTenant, id_proof_type: value})}>
                     <SelectTrigger className="col-span-3">
@@ -1026,16 +1011,6 @@ const Tenants = () => {
                   className="col-span-3"
                   value={editTenant.check_out_date}
                   onChange={(e) => setEditTenant({...editTenant, check_out_date: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit-check-out-time" className="text-right">Check-Out Time</Label>
-                <Input 
-                  id="edit-check-out-time" 
-                  type="time" 
-                  className="col-span-3"
-                  value={editTenant.check_out_time}
-                  onChange={(e) => setEditTenant({...editTenant, check_out_time: e.target.value})}
                 />
               </div>
               

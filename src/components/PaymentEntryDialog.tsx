@@ -35,7 +35,6 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
     payment_date: new Date().toISOString().split('T')[0],
     payment_month: new Date().toISOString().split('T')[0].slice(0, 7) + "-01",
     rent_amount: "",
-    deposit_amount: "",
     other_charges: "",
     payment_method: "",
     remarks: ""
@@ -110,15 +109,15 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
 
     setLoading(true);
     try {
+      const currentDateTime = new Date();
       const { error } = await supabase
         .from('payments')
         .insert({
           tenant_id: formData.tenant_id,
           owner_id: user.id,
-          payment_date: formData.payment_date,
+          payment_date: currentDateTime.toISOString().split('T')[0],
           payment_month: formData.payment_month,
           rent_amount: parseFloat(formData.rent_amount),
-          deposit_amount: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
           other_charges: formData.other_charges ? parseFloat(formData.other_charges) : 0,
           payment_method: formData.payment_method,
           remarks: formData.remarks || null
@@ -133,7 +132,6 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
         payment_date: new Date().toISOString().split('T')[0],
         payment_month: new Date().toISOString().split('T')[0].slice(0, 7) + "-01",
         rent_amount: "",
-        deposit_amount: "",
         other_charges: "",
         payment_method: "",
         remarks: ""
@@ -181,10 +179,11 @@ export function PaymentEntryDialog({ onPaymentAdded }: PaymentEntryDialogProps) 
             <Input
               id="payment_date"
               type="date"
-              value={formData.payment_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, payment_date: e.target.value }))}
-              required
+              value={new Date().toISOString().split('T')[0]}
+              disabled
+              className="bg-muted"
             />
+            <p className="text-sm text-muted-foreground">Automatically set to today's date</p>
           </div>
 
           <div>

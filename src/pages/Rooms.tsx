@@ -72,18 +72,37 @@ const Rooms = () => {
         .from('rooms')
         .select(`
           *,
-          tenants(
+          tenants!inner (
             id,
             full_name,
             phone,
-            email
+            email,
+            status
           )
         `)
         .eq('owner_id', user?.id)
+        .eq('tenants.status', 'active')
         .order('room_number');
 
       if (error) throw error;
-      setRooms(data || []);
+      
+      // Also fetch rooms without any active tenants
+      const { data: emptyRooms, error: emptyRoomsError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('owner_id', user?.id)
+        .not('id', 'in', `(${data?.map(r => `'${r.id}'`).join(',') || "''"})`)
+        .order('room_number');
+
+      if (emptyRoomsError) throw emptyRoomsError;
+
+      // Combine rooms with tenants and empty rooms
+      const allRooms = [
+        ...(data || []),
+        ...(emptyRooms || []).map(room => ({ ...room, tenants: [] }))
+      ].sort((a, b) => a.room_number.localeCompare(b.room_number));
+
+      setRooms(allRooms);
     } catch (error) {
       toast({
         title: "Error",
@@ -388,8 +407,11 @@ const Rooms = () => {
         {/* Rooms Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRooms.map((room) => {
-            const currentOccupancy = room.tenants?.length || 0;
+            const activeTenants = room.tenants?.filter(t => t.status === 'active') || [];
+            const currentOccupancy = activeTenants.length;
             const availableBeds = Math.max(0, (room.capacity || 1) - currentOccupancy);
+            const isOccupied = currentOccupancy > 0;
+            const isFull = currentOccupancy >= room.capacity;
             
             return (
               <Card 
@@ -399,26 +421,40 @@ const Rooms = () => {
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-lg">Room {room.room_number}</CardTitle>
-                  {getStatusBadge(room.status)}
+                  {room.status === 'under_maintenance' ? (
+                    <Badge className="bg-warning text-warning-foreground">Maintenance</Badge>
+                  ) : isFull ? (
+                    <Badge className="bg-occupied text-occupied-foreground">Full</Badge>
+                  ) : isOccupied ? (
+                    <Badge className="bg-vacant text-vacant-foreground">
+                      Vacant - {availableBeds} Bed{availableBeds !== 1 ? 's' : ''} Available
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-vacant text-vacant-foreground">Vacant</Badge>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="text-center space-y-1">
                     <p className="text-sm font-medium">
-                      Capacity: {room.capacity || 1} | Occupied: {currentOccupancy} | Vacant: {availableBeds}
+                      Capacity: {room.capacity || 1} | Occupied: {currentOccupancy} | Available: {availableBeds}
                     </p>
                     <div className="flex items-center justify-center space-x-2">
                       <IndianRupee className="h-4 w-4 text-success" />
-                      <span className="font-semibold text-success">{Number(room.rent_amount).toLocaleString()}/month</span>
+                      <span className="font-semibold text-success">₹{Number(room.rent_amount).toLocaleString()}/month</span>
                     </div>
                   </div>
 
                   <div className="text-center">
-                    {availableBeds === 0 ? (
-                      <Badge className="bg-occupied text-occupied-foreground">Occupied</Badge>
-                    ) : (
+                    {room.status === 'under_maintenance' ? (
+                      <Badge className="bg-warning text-warning-foreground">Under Maintenance</Badge>
+                    ) : isFull ? (
+                      <Badge className="bg-occupied text-occupied-foreground">Full</Badge>
+                    ) : isOccupied ? (
                       <Badge className="bg-vacant text-vacant-foreground">
-                        Vacant - {availableBeds === 1 ? '1 Bed Available' : `${availableBeds} Beds Available`}
+                        Vacant - {availableBeds} Bed{availableBeds !== 1 ? 's' : ''} Available
                       </Badge>
+                    ) : (
+                      <Badge className="bg-vacant text-vacant-foreground">Vacant</Badge>
                     )}
                   </div>
 
@@ -437,7 +473,7 @@ const Rooms = () => {
                       size="sm" 
                       className="text-destructive hover:text-destructive"
                       onClick={() => openDeleteDialog(room)}
-                      disabled={room.status === 'occupied'}
+                      disabled={currentOccupancy > 0}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -461,17 +497,23 @@ const Rooms = () => {
           <Card className="bg-gradient-card shadow-soft">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-occupied-foreground mb-1">
-                {rooms.filter(r => r.status === "occupied").length}
+                {rooms.filter(r => {
+                  const activeTenants = r.tenants?.filter(t => t.status === 'active') || [];
+                  return activeTenants.length >= r.capacity;
+                }).length}
               </div>
-              <div className="text-sm text-muted-foreground">Occupied</div>
+              <div className="text-sm text-muted-foreground">Full Rooms</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-card shadow-soft">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-vacant-foreground mb-1">
-                {rooms.filter(r => r.status === "vacant").length}
+                {rooms.filter(r => {
+                  const activeTenants = r.tenants?.filter(t => t.status === 'active') || [];
+                  return activeTenants.length < r.capacity && r.status !== 'under_maintenance';
+                }).length}
               </div>
-              <div className="text-sm text-muted-foreground">Vacant</div>
+              <div className="text-sm text-muted-foreground">Available Rooms</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-card shadow-soft">

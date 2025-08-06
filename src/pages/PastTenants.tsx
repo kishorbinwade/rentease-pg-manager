@@ -172,14 +172,14 @@ export default function PastTenants() {
                     <div className="text-right space-y-2">
                       <div className="flex items-center gap-4">
                         <div className="text-sm">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>Check-in: {new Date(tenant.check_in_date).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>Check-out: {new Date(tenant.check_out_date).toLocaleDateString()}</span>
-                          </div>
+                           <div className="flex items-center gap-1">
+                             <Calendar className="h-3 w-3" />
+                             <span>Check-in: {new Date(tenant.check_in_date).toLocaleString()}</span>
+                           </div>
+                           <div className="flex items-center gap-1">
+                             <Calendar className="h-3 w-3" />
+                             <span>Check-out: {new Date(tenant.check_out_date).toLocaleString()}</span>
+                           </div>
                         </div>
                         
                         <div className="text-sm">

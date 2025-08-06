@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,11 +35,23 @@ export const RoomEditDialog = ({ room, isOpen, onClose, onUpdate }: RoomEditDial
   const { toast } = useToast();
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [editRoom, setEditRoom] = useState({
-    rent_amount: room?.rent_amount?.toString() || "",
-    capacity: room?.capacity?.toString() || "",
+    rent_amount: "",
+    capacity: "",
   });
 
-  const currentOccupancy = room?.tenants?.length || 0;
+  // Update form when room changes
+  const activeTenants = room?.tenants?.filter(t => t.status === 'active') || [];
+  const currentOccupancy = activeTenants.length;
+
+  // Pre-fill form when room changes
+  useEffect(() => {
+    if (room && isOpen) {
+      setEditRoom({
+        rent_amount: room.rent_amount?.toString() || "",
+        capacity: room.capacity?.toString() || "",
+      });
+    }
+  }, [room, isOpen]);
 
   const handleSave = async () => {
     try {
@@ -56,10 +68,10 @@ export const RoomEditDialog = ({ room, isOpen, onClose, onUpdate }: RoomEditDial
         return;
       }
 
-      if (!newCapacity || newCapacity < 1) {
+      if (!newCapacity || newCapacity < 1 || !Number.isInteger(newCapacity)) {
         toast({
           title: "Error", 
-          description: "Capacity must be an integer greater than or equal to 1",
+          description: "Capacity must be an integer greater than 0",
           variant: "destructive",
         });
         return;

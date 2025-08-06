@@ -128,15 +128,39 @@ export default function Rent() {
     return matchesSearch && matchesStatus;
   });
 
+  // Fetch real-time deposit total from active tenants
+  const [totalActiveDeposits, setTotalActiveDeposits] = useState(0);
+
+  useEffect(() => {
+    fetchActiveDeposits();
+  }, [user]);
+
+  const fetchActiveDeposits = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('deposit_amount')
+        .eq('owner_id', user.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+      
+      const total = data?.reduce((sum, tenant) => sum + (tenant.deposit_amount || 0), 0) || 0;
+      setTotalActiveDeposits(total);
+    } catch (error) {
+      console.error('Error fetching active deposits:', error);
+    }
+  };
+
   // Calculate statistics for the current month
   const stats = {
     totalRent: filteredRecords.reduce((sum, record) => sum + record.amount, 0),
     collected: filteredRecords.filter(record => record.status === 'paid').reduce((sum, record) => {
       return sum + (record.latest_payment?.rent_amount || 0);
     }, 0),
-    totalDeposits: filteredRecords.reduce((sum, record) => {
-      return sum + (record.latest_payment?.deposit_amount || 0);
-    }, 0),
+    totalDeposits: totalActiveDeposits,
     totalOtherCharges: filteredRecords.reduce((sum, record) => {
       return sum + (record.latest_payment?.other_charges || 0);
     }, 0),
@@ -171,6 +195,7 @@ export default function Rent() {
 
   const handlePaymentAdded = () => {
     fetchRentRecords();
+    fetchActiveDeposits();
   };
 
   const handleGenerateReceipt = (recordId: string) => {
@@ -241,7 +266,7 @@ export default function Rent() {
                     <span className="text-sm">Collected: ₹{stats.collected.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-center space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div className="w-3 h-3 rounded-full bg-destructive"></div>
                     <span className="text-sm">Pending: ₹{stats.pending.toLocaleString()}</span>
                   </div>
                 </div>
