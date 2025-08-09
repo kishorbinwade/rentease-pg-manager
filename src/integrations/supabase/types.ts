@@ -75,6 +75,98 @@ export type Database = {
           },
         ]
       }
+      meter_readings: {
+        Row: {
+          bill_amount: number
+          created_at: string
+          id: string
+          meter_id: string
+          reading_date: string
+          reading_value: number
+          recorded_at: string
+          recorded_by: string
+          units_consumed: number
+          updated_at: string
+        }
+        Insert: {
+          bill_amount?: number
+          created_at?: string
+          id?: string
+          meter_id: string
+          reading_date: string
+          reading_value: number
+          recorded_at?: string
+          recorded_by: string
+          units_consumed?: number
+          updated_at?: string
+        }
+        Update: {
+          bill_amount?: number
+          created_at?: string
+          id?: string
+          meter_id?: string
+          reading_date?: string
+          reading_value?: number
+          recorded_at?: string
+          recorded_by?: string
+          units_consumed?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "meters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meters: {
+        Row: {
+          created_at: string
+          id: string
+          meter_id: string
+          owner_id: string
+          room_id: string
+          starting_reading: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meter_id: string
+          owner_id: string
+          room_id: string
+          starting_reading?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meter_id?: string
+          owner_id?: string
+          room_id?: string
+          starting_reading?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meters_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "room_availability"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meters_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           created_at: string
@@ -295,6 +387,42 @@ export type Database = {
         }
         Relationships: []
       }
+      tariff_config: {
+        Row: {
+          created_at: string
+          effective_from: string
+          id: string
+          is_active: boolean
+          rate_per_unit: number
+          slab_from: number
+          slab_to: number | null
+          state_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          rate_per_unit: number
+          slab_from: number
+          slab_to?: number | null
+          state_name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          rate_per_unit?: number
+          slab_from?: number
+          slab_to?: number | null
+          state_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tenants: {
         Row: {
           agreement_url: string | null
@@ -397,6 +525,10 @@ export type Database = {
       }
     }
     Functions: {
+      calculate_electricity_bill: {
+        Args: { units_consumed: number }
+        Returns: number
+      }
       get_user_role: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["user_role"]

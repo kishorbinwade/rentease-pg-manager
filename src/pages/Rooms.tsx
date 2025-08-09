@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, User, IndianRupee, Users, Bed } from "lucide-react";
+import { Plus, Search, Edit, Trash2, User, IndianRupee, Users, Bed, Zap } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { RoomEditDialog } from "@/components/RoomEditDialog";
+import MeterDetailsModal from "@/components/MeterDetailsModal";
 
 const Rooms = () => {
   const { user } = useAuth();
@@ -39,16 +40,20 @@ const Rooms = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
+  const [isMeterDialogOpen, setIsMeterDialogOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [editingRoom, setEditingRoom] = useState(null);
   const [rooms, setRooms] = useState([]);
+  const [meters, setMeters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newRoom, setNewRoom] = useState({
     room_number: "",
     room_type: "",
     rent_amount: "",
     floor: "",
-    capacity: ""
+    capacity: "",
+    meter_id: "",
+    starting_reading: ""
   });
   const [editRoom, setEditRoom] = useState({
     id: "",
@@ -63,6 +68,7 @@ const Rooms = () => {
   useEffect(() => {
     if (user) {
       fetchRooms();
+      fetchMeters();
     }
   }, [user]);
 
@@ -112,6 +118,20 @@ const Rooms = () => {
     }
   };
 
+  const fetchMeters = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('meters')
+        .select('*')
+        .eq('owner_id', user?.id);
+
+      if (error) throw error;
+      setMeters(data || []);
+    } catch (error) {
+      console.error('Error fetching meters:', error);
+    }
+  };
+
   const handleAddRoom = async () => {
     try {
       if (!newRoom.room_number || !newRoom.room_type || !newRoom.rent_amount || !newRoom.capacity) {
@@ -123,7 +143,8 @@ const Rooms = () => {
         return;
       }
 
-      const { error } = await supabase
+      // Insert room first
+      const { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .insert({
           room_number: newRoom.room_number,
@@ -133,13 +154,30 @@ const Rooms = () => {
           capacity: parseInt(newRoom.capacity),
           owner_id: user?.id,
           status: 'vacant'
+        })
+        .select()
+        .single();
+
+      if (roomError) throw roomError;
+
+      // Generate meter ID if not provided
+      const meterId = newRoom.meter_id || `R${newRoom.room_number}-${Date.now()}`;
+      
+      // Create associated meter
+      const { error: meterError } = await supabase
+        .from('meters')
+        .insert({
+          meter_id: meterId,
+          room_id: roomData.id,
+          owner_id: user?.id,
+          starting_reading: parseFloat(newRoom.starting_reading) || 0
         });
 
-      if (error) throw error;
+      if (meterError) throw meterError;
 
       toast({
         title: "Success",
-        description: "Room added successfully",
+        description: "Room and meter added successfully",
       });
 
       setNewRoom({
@@ -147,10 +185,13 @@ const Rooms = () => {
         room_type: "",
         rent_amount: "",
         floor: "",
-        capacity: ""
+        capacity: "",
+        meter_id: "",
+        starting_reading: ""
       });
       setIsAddDialogOpen(false);
       fetchRooms();
+      fetchMeters();
     } catch (error) {
       toast({
         title: "Error",
@@ -216,6 +257,11 @@ const Rooms = () => {
   const openTenantDialog = (room) => {
     setSelectedRoom(room);
     setIsTenantDialogOpen(true);
+  };
+
+  const openMeterDialog = (room) => {
+    setSelectedRoom(room);
+    setIsMeterDialogOpen(true);
   };
 
   const handleDeleteRoom = async () => {
@@ -365,6 +411,34 @@ const Rooms = () => {
                     onChange={(e) => setNewRoom({...newRoom, floor: e.target.value})}
                   />
                 </div>
+                <div className="col-span-4 border-t pt-4">
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    Electric Meter Details
+                  </h4>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="meterId" className="text-right">Meter ID</Label>
+                  <Input 
+                    id="meterId" 
+                    placeholder="Auto-generated if empty" 
+                    className="col-span-3"
+                    value={newRoom.meter_id}
+                    onChange={(e) => setNewRoom({...newRoom, meter_id: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="startingReading" className="text-right">Starting Reading</Label>
+                  <Input 
+                    id="startingReading" 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0" 
+                    className="col-span-3"
+                    value={newRoom.starting_reading}
+                    onChange={(e) => setNewRoom({...newRoom, starting_reading: e.target.value})}
+                  />
+                </div>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -469,6 +543,15 @@ const Rooms = () => {
                     <Button 
                       variant="outline" 
                       size="sm" 
+                      className="flex-1"
+                      onClick={() => openMeterDialog(room)}
+                    >
+                      <Zap className="mr-1 h-3 w-3" />
+                      Meter
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
                       className="text-destructive hover:text-destructive"
                       onClick={() => openDeleteDialog(room)}
                       disabled={currentOccupancy > 0}
@@ -549,6 +632,18 @@ const Rooms = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Meter Details Modal */}
+        <MeterDetailsModal
+          isOpen={isMeterDialogOpen}
+          onClose={() => setIsMeterDialogOpen(false)}
+          room={selectedRoom}
+          meter={meters.find(m => m.room_id === selectedRoom?.id)}
+          onMeterUpdate={() => {
+            fetchMeters();
+            fetchRooms();
+          }}
+        />
 
         {/* Tenant Details Dialog */}
         <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>

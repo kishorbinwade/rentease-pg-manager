@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, IndianRupee, AlertCircle, Home, TrendingUp, Calendar } from "lucide-react";
+import { Building2, Users, IndianRupee, AlertCircle, Home, TrendingUp, Calendar, Zap } from "lucide-react";
 import Header from "@/components/Header";
 import StatsCard from "@/components/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,16 @@ interface DashboardStats {
   pendingComplaints: number;
   totalDeposits: number;
   vacantBeds: number;
+}
+
+interface ElectricityStats {
+  totalUnits: number;
+  totalBill: number;
+  topRooms: Array<{
+    room: string;
+    units: number;
+    bill: number;
+  }>;
 }
 
 interface ChartData {
@@ -43,11 +53,17 @@ const Dashboard = () => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [recentTenants, setRecentTenants] = useState([]);
   const [recentComplaints, setRecentComplaints] = useState([]);
+  const [electricityStats, setElectricityStats] = useState<ElectricityStats>({
+    totalUnits: 0,
+    totalBill: 0,
+    topRooms: []
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user && userProfile) {
       fetchDashboardData();
+      fetchElectricityData();
     }
   }, [user, userProfile]);
 
@@ -181,6 +197,55 @@ const Dashboard = () => {
     }
   };
 
+  const fetchElectricityData = async () => {
+    try {
+      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
+      
+      // Get all meter readings for current month
+      const { data: readings, error } = await supabase
+        .from('meter_readings')
+        .select(`
+          *,
+          meter:meters(
+            room_id,
+            room:rooms(room_number)
+          )
+        `)
+        .gte('reading_date', `${currentMonth}-01`)
+        .lt('reading_date', `${currentMonth === '2025-12' ? '2026-01' : (parseInt(currentMonth.split('-')[1]) + 1).toString().padStart(2, '0') === '13' ? `${parseInt(currentMonth.split('-')[0]) + 1}-01` : `${currentMonth.split('-')[0]}-${(parseInt(currentMonth.split('-')[1]) + 1).toString().padStart(2, '0')}`}-01`);
+
+      if (error) throw error;
+
+      const totalUnits = readings?.reduce((sum, reading) => sum + reading.units_consumed, 0) || 0;
+      const totalBill = readings?.reduce((sum, reading) => sum + reading.bill_amount, 0) || 0;
+
+      // Group by room and calculate totals
+      const roomStats = readings?.reduce((acc, reading) => {
+        const roomNumber = reading.meter?.room?.room_number || 'Unknown';
+        if (!acc[roomNumber]) {
+          acc[roomNumber] = { units: 0, bill: 0 };
+        }
+        acc[roomNumber].units += reading.units_consumed;
+        acc[roomNumber].bill += reading.bill_amount;
+        return acc;
+      }, {}) || {};
+
+      // Get top 3 rooms by usage
+      const topRooms = Object.entries(roomStats)
+        .map(([room, stats]: [string, any]) => ({ room, ...stats }))
+        .sort((a, b) => b.units - a.units)
+        .slice(0, 3);
+
+      setElectricityStats({
+        totalUnits,
+        totalBill,
+        topRooms
+      });
+    } catch (error) {
+      console.error('Error fetching electricity data:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -235,6 +300,41 @@ const Dashboard = () => {
             color="primary"
             trend={{ value: "Active tenants", isPositive: true }}
           />
+        </div>
+
+        {/* Electricity Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <StatsCard
+            title="Total Units (This Month)"
+            value={`${electricityStats.totalUnits.toFixed(1)} kWh`}
+            icon={Zap}
+            color="warning"
+          />
+          <StatsCard
+            title="Total Electricity Bill"
+            value={`₹${electricityStats.totalBill.toFixed(2)}`}
+            icon={IndianRupee}
+            color="success"
+          />
+          <div className="bg-gradient-card shadow-soft rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Top 3 Rooms by Usage
+            </h3>
+            <div className="space-y-3">
+              {electricityStats.topRooms.length > 0 ? electricityStats.topRooms.map((room) => (
+                <div key={room.room} className="flex justify-between items-center p-2 bg-background rounded">
+                  <span className="font-medium">Room {room.room}</span>
+                  <div className="text-right">
+                    <div className="text-sm font-medium">{room.units.toFixed(1)} kWh</div>
+                    <div className="text-xs text-success">₹{room.bill.toFixed(2)}</div>
+                  </div>
+                </div>
+              )) : (
+                <p className="text-muted-foreground text-center py-4">No usage data yet</p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Analytics Cards */}
