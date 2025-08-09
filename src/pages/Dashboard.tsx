@@ -4,7 +4,6 @@ import Header from "@/components/Header";
 import StatsCard from "@/components/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -122,7 +121,7 @@ const Dashboard = () => {
         vacantBeds
       });
 
-      // Generate chart data for last 6 months
+      // Generate simple chart data for last 6 months (for future enhancement)
       const chartDataPromises = [];
       for (let i = 5; i >= 0; i--) {
         const date = new Date();
@@ -182,11 +181,6 @@ const Dashboard = () => {
     }
   };
 
-  const pieData = [
-    { name: 'Occupied', value: stats.occupiedRooms, color: 'hsl(var(--occupied))' },
-    { name: 'Vacant', value: stats.vacantRooms, color: 'hsl(var(--vacant))' }
-  ];
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -243,94 +237,61 @@ const Dashboard = () => {
           />
         </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Rent Collection Trend */}
+        {/* Analytics Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+          {/* Collection Rate Visual */}
           <Card className="shadow-soft">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                Monthly Rent Collection
+                Collection Rate
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip 
-                      labelFormatter={(value) => `Month: ${value}`}
-                      formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Rent Collected']}
+              <div className="text-center">
+                <div className="relative w-32 h-32 mx-auto mb-4">
+                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 42 42">
+                    <circle 
+                      cx="21" 
+                      cy="21" 
+                      r="15.91549430918954" 
+                      fill="transparent" 
+                      stroke="hsl(var(--muted))" 
+                      strokeWidth="3"
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="rent" 
+                    <circle 
+                      cx="21" 
+                      cy="21" 
+                      r="15.91549430918954" 
+                      fill="transparent" 
                       stroke="hsl(var(--primary))" 
-                      strokeWidth={3}
-                      dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 4 }}
+                      strokeWidth="3"
+                      strokeDasharray={`${stats.totalTenants > 0 ? Math.round((stats.rentCollected / (stats.totalTenants * 5000)) * 100) : 0} ${100 - (stats.totalTenants > 0 ? Math.round((stats.rentCollected / (stats.totalTenants * 5000)) * 100) : 0)}`}
+                      strokeDashoffset="0"
+                      className="transition-all duration-300"
                     />
-                  </LineChart>
-                </ResponsiveContainer>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-primary">
+                      {stats.totalTenants > 0 ? Math.round((stats.rentCollected / (stats.totalTenants * 5000)) * 100) : 0}%
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Monthly Collection Rate</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Occupancy Rate */}
+          {/* Room Status Overview */}
           <Card className="shadow-soft">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                Occupancy Rate Trend
+                Room Status
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip 
-                      labelFormatter={(value) => `Month: ${value}`}
-                      formatter={(value: number) => [`${value}%`, 'Occupancy']}
-                    />
-                    <Bar dataKey="occupancy" fill="hsl(var(--occupied))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Room Status Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          <Card className="shadow-soft">
-            <CardHeader>
-              <CardTitle>Room Status Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={80}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value: number, name: string) => [`${value} rooms`, name]} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 space-y-2">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-occupied"></div>
@@ -345,10 +306,19 @@ const Dashboard = () => {
                   </div>
                   <span className="font-medium">{stats.vacantRooms}</span>
                 </div>
+                <div className="mt-4 pt-4 border-t">
+                  <div className="text-center">
+                    <p className="text-lg font-semibold">
+                      {stats.totalRooms > 0 ? Math.round((stats.occupiedRooms / stats.totalRooms) * 100) : 0}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">Occupancy Rate</p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Quick Stats */}
           <Card className="shadow-soft">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -362,18 +332,38 @@ const Dashboard = () => {
                 <span className="font-medium">{stats.totalRooms}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Occupancy Rate</span>
-                <span className="font-medium">
-                  {stats.totalRooms > 0 ? Math.round((stats.occupiedRooms / stats.totalRooms) * 100) : 0}%
-                </span>
+                <span className="text-muted-foreground">Available Beds</span>
+                <span className="font-medium text-success">{stats.vacantBeds}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pending Complaints</span>
                 <span className="font-medium text-warning">{stats.pendingComplaints}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Available Beds</span>
-                <span className="font-medium text-success">{stats.vacantBeds}</span>
+              <div className="pt-4 border-t text-center">
+                <p className="text-xl font-bold text-primary">
+                  ₹{stats.totalDeposits.toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground">Total Active Deposits</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Monthly Trends */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <Card className="shadow-soft">
+            <CardHeader>
+              <CardTitle>Monthly Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                {chartData.slice(-6).map((data, index) => (
+                  <div key={index} className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm font-medium">{data.month}</p>
+                    <p className="text-lg font-bold text-primary">₹{data.rent.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{data.occupancy}% occupied</p>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -382,18 +372,22 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle>Financial Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary">
+                <p className="text-3xl font-bold text-primary">
                   ₹{stats.rentCollected.toLocaleString()}
                 </p>
                 <p className="text-sm text-muted-foreground">Rent Collected This Month</p>
               </div>
-              <div className="text-center">
-                <p className="text-xl font-semibold text-foreground">
-                  ₹{stats.totalDeposits.toLocaleString()}
-                </p>
-                <p className="text-sm text-muted-foreground">Total Active Deposits</p>
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div className="text-center">
+                  <p className="text-lg font-semibold">{stats.totalTenants}</p>
+                  <p className="text-xs text-muted-foreground">Active Tenants</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold">{stats.vacantBeds}</p>
+                  <p className="text-xs text-muted-foreground">Available Beds</p>
+                </div>
               </div>
             </CardContent>
           </Card>
