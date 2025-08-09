@@ -74,10 +74,13 @@ const Rooms = () => {
 
   const fetchRooms = async () => {
     try {
-      // First, fetch all rooms for the owner
+      // Fetch all rooms with their meters for the owner
       const { data: allRooms, error: allRoomsError } = await supabase
         .from('rooms')
-        .select('*')
+        .select(`
+          *,
+          meter:meters(*)
+        `)
         .eq('owner_id', user?.id)
         .order('room_number');
 
@@ -99,7 +102,7 @@ const Rooms = () => {
 
       if (tenantsError) throw tenantsError;
 
-      // Combine rooms with their active tenants
+      // Combine rooms with their active tenants and meters
       const roomsWithTenants = allRooms?.map(room => ({
         ...room,
         tenants: activeTenants?.filter(tenant => tenant.room_id === room.id) || []
@@ -191,8 +194,7 @@ const Rooms = () => {
       });
       setIsAddDialogOpen(false);
       fetchRooms();
-      fetchMeters();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
         description: "Failed to add room",
@@ -545,9 +547,10 @@ const Rooms = () => {
                       size="sm" 
                       className="flex-1"
                       onClick={() => openMeterDialog(room)}
+                      disabled={!room.meter}
                     >
                       <Zap className="mr-1 h-3 w-3" />
-                      Meter
+                      {room.meter ? 'Meter' : 'No Meter'}
                     </Button>
                     <Button 
                       variant="outline" 
@@ -638,9 +641,8 @@ const Rooms = () => {
           isOpen={isMeterDialogOpen}
           onClose={() => setIsMeterDialogOpen(false)}
           room={selectedRoom}
-          meter={meters.find(m => m.room_id === selectedRoom?.id)}
+          meter={selectedRoom?.meter}
           onMeterUpdate={() => {
-            fetchMeters();
             fetchRooms();
           }}
         />

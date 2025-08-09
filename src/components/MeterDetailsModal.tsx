@@ -40,12 +40,14 @@ const MeterDetailsModal = ({ isOpen, onClose, room, meter, onMeterUpdate }: Mete
   });
 
   useEffect(() => {
-    if (isOpen && meter) {
+    if (isOpen && meter?.id) {
       fetchReadings();
     }
-  }, [isOpen, meter]);
+  }, [isOpen, meter?.id]);
 
   const fetchReadings = async () => {
+    if (!meter?.id) return;
+    
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -170,6 +172,21 @@ const MeterDetailsModal = ({ isOpen, onClose, room, meter, onMeterUpdate }: Mete
   };
 
   const currentReading = getCurrentReading();
+
+  if (!meter) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>No Meter Found</DialogTitle>
+            <DialogDescription>
+              This room doesn't have a meter configured yet. Please add a meter first.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
