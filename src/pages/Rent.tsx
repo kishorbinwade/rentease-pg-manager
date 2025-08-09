@@ -128,7 +128,7 @@ export default function Rent() {
     return matchesSearch && matchesStatus;
   });
 
-  // Fetch real-time deposit total from active tenants
+  // Fetch real-time deposit total accounting for returns
   const [totalActiveDeposits, setTotalActiveDeposits] = useState(0);
 
   useEffect(() => {
@@ -141,13 +141,23 @@ export default function Rent() {
     try {
       const { data, error } = await supabase
         .from('tenants')
-        .select('deposit_amount')
-        .eq('owner_id', user.id)
-        .eq('status', 'active');
+        .select('deposit_amount, deposit_return_amount, status')
+        .eq('owner_id', user.id);
 
       if (error) throw error;
       
-      const total = data?.reduce((sum, tenant) => sum + (tenant.deposit_amount || 0), 0) || 0;
+      // Calculate total deposits minus returned amounts
+      const total = data?.reduce((sum, tenant) => {
+        const deposited = tenant.deposit_amount || 0;
+        const returned = tenant.deposit_return_amount || 0;
+        // For active tenants: full deposit, for inactive: deposit minus returned amount
+        if (tenant.status === 'active') {
+          return sum + deposited;
+        } else {
+          return sum + Math.max(0, deposited - returned);
+        }
+      }, 0) || 0;
+      
       setTotalActiveDeposits(total);
     } catch (error) {
       console.error('Error fetching active deposits:', error);

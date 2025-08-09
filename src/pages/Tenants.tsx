@@ -380,8 +380,8 @@ const Tenants = () => {
         const checkInDate = new Date(editTenant.check_in_date);
         const checkOutDate = new Date(editTenant.check_out_date);
         
-        if (checkOutDate <= checkInDate) {
-          throw new Error('Check-out date must be after check-in date');
+        if (checkOutDate < checkInDate) {
+          throw new Error('Check-out date cannot be before check-in date');
         }
 
         // Validate deposit return amount
